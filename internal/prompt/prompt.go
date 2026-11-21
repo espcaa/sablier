@@ -4,7 +4,9 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"strconv"
 	"strings"
+	"time"
 	"unicode"
 )
 
@@ -12,11 +14,17 @@ func Normalize(text string) string {
 	return strings.Join(strings.Fields(strings.ToLower(text)), " ")
 }
 
-// salted so short prompts like "yes" can't be guessed
-func Hash(salt []byte, text string) string {
+// unike hash per prompt
+func Key(salt []byte, session string, at time.Time) []byte {
 	m := hmac.New(sha256.New, salt)
+	m.Write([]byte(session + "\x00" + strconv.FormatInt(at.UnixMilli(), 10)))
+	return m.Sum(nil)
+}
+
+func Hash(key []byte, text string) string {
+	m := hmac.New(sha256.New, key)
 	m.Write([]byte(Normalize(text)))
-	return hex.EncodeToString(m.Sum(nil)[:16])
+	return hex.EncodeToString(m.Sum(nil))
 }
 
 // whole prompt matches only

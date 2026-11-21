@@ -116,7 +116,7 @@ func (m *Mapper) Map(e Event) []event.Event {
 			break
 		}
 		emit(s, event.PromptSent, at, event.PromptSentData{
-			Hash:         prompt.Hash(m.Salt, d.Item.Payload.Text),
+			Hash:         prompt.Hash(prompt.Key(m.Salt, m.Session, at), d.Item.Payload.Text),
 			ApprovalLike: prompt.ApprovalLike(d.Item.Payload.Text),
 			Queued:       s.turn != "",
 		})

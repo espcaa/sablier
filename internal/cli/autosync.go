@@ -30,7 +30,7 @@ func startAutoSync(s *store.Store, every time.Duration, warn io.Writer) (stop fu
 		t := time.NewTicker(every)
 		defer t.Stop()
 		for {
-			upload(ctx, s, client) // errors are retried next round
+			upload(ctx, s, client, io.Discard) // errors are retried next round, and the agent owns the screen
 			select {
 			case <-ctx.Done():
 				return
@@ -44,7 +44,7 @@ func startAutoSync(s *store.Store, every time.Duration, warn io.Writer) (stop fu
 		<-done
 		ctx, cancel := context.WithTimeout(context.Background(), finalSyncIn)
 		defer cancel()
-		if _, err := upload(ctx, s, client); err != nil {
+		if _, err := upload(ctx, s, client, warn); err != nil {
 			fmt.Fprintln(warn, "sablier: couldn't sync, will retry next time:", err)
 		}
 	}

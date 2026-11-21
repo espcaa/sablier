@@ -5,7 +5,7 @@ description: Are we evil,,,
 
 ## What we never look at
 
-- prompt text, which is only kept as a salted hash so we can see if you just spam the same prompt
+- prompt text, we only get a hash that proves later what you sent, if you choose to verify a project
 - what you type, we only record events _when_ you type
 - code, file contents and tool inputs or outputs
 - command lines
@@ -39,6 +39,8 @@ Every event has these fields:
 | `harness`    | `claude-code`, `codex` or `opencode`                                                          |
 | `source`     | `launcher` for your terminal input, `adapter` for what the agent reports                      |
 | `data`       | depends on the kind                                                                           |
+| `prev_hash`  | the `hash` of the event before it                                                             |
+| `hash`       | a sha-256 of this event and `prev_hash`, so changing or removing an event after it was sent breaks every hash after it |
 
 And the `data` for each kind, exactly:
 
@@ -55,7 +57,7 @@ And the `data` for each kind, exactly:
 | `agent_turn_end`   | `{"turn_id": "…", "reason": "done"}`, or `interrupted`, `error`, `closed`                                  |
 | `tool_call`        | `{"tool": "edit", "duration_ms": 840}`, the tool is `shell`, `edit`, `read`, `web`, `agent` or `other`     |
 
-The prompt `hash` is an hmac-sha256 of the prompt (lowercased, spaces squashed) with a salt that never leaves your machine, so we can't reverse it, only see that two prompts were the same.
+The prompt `hash` is an hmac-sha256 of the prompt (lowercased, spaces squashed), keyed with something made from a secret that never leaves your machine and that prompt's session and time. We can't reverse it, and the same prompt sent twice hashes differently, so we can't even tell when you repeat yourself. It's only there so that if you verify a project later, the server can check the prompts you send match what you actually sent back then.
 
 ## What's stored on your device
 

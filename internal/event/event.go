@@ -38,6 +38,8 @@ type Event struct {
 	Harness   string          `json:"harness"` // "claude-code", "codex", "unknown", ...
 	Source    Source          `json:"source"`
 	Data      json.RawMessage `json:"data,omitempty"`
+	PrevHash  string          `json:"prev_hash,omitempty"` // empty on events from before the chain
+	Hash      string          `json:"hash,omitempty"`
 }
 
 // payloads, one per kind
@@ -69,7 +71,7 @@ type PromptSentData struct {
 	ComposeMs    int64  `json:"compose_ms"`
 	Queued       bool   `json:"queued"`        // sent while the agent was busy
 	ApprovalLike bool   `json:"approval_like"` // whole prompt matched the yes/continue list
-	Hash         string `json:"hash"`          // salted hmac of normalized text
+	Hash         string `json:"hash"`          // commitment to the text, see prompt.Hash
 }
 
 type ApprovalData struct {

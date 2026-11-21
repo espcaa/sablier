@@ -1,6 +1,9 @@
 package prompt
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestApprovalLike(t *testing.T) {
 	cases := map[string]bool{
@@ -23,18 +26,19 @@ func TestApprovalLike(t *testing.T) {
 }
 
 func TestHash(t *testing.T) {
-	salt := []byte("salt-a")
+	at := time.Date(2026, 11, 21, 10, 0, 0, 0, time.UTC)
+	k := Key([]byte("salt"), "run:a", at)
 
-	if Hash(salt, "Continue ") != Hash(salt, "continue") {
+	if Hash(k, "Continue ") != Hash(k, "continue") {
 		t.Error("normalized prompts should hash the same")
 	}
-	if Hash(salt, "yes") == Hash(salt, "no") {
+	if Hash(k, "yes") == Hash(k, "no") {
 		t.Error("different prompts should differ")
 	}
-	if Hash(salt, "yes") == Hash([]byte("salt-b"), "yes") {
-		t.Error("different salts should differ")
+	if Hash(k, "yes") == Hash(Key([]byte("salt"), "run:a", at.Add(time.Millisecond)), "yes") {
+		t.Error("the same prompt at another time should differ")
 	}
-	if len(Hash(salt, "yes")) != 32 {
-		t.Error("expected 128-bit hex hash")
+	if Hash(k, "yes") == Hash(Key([]byte("salt"), "run:b", at), "yes") {
+		t.Error("the same prompt in another session should differ")
 	}
 }

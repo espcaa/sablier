@@ -55,7 +55,7 @@ func Map(st State, in Input) (State, []event.Event) {
 		st = m.denyPending(st, isMain)
 		st = m.closeTurn(st, "interrupted")
 		m.emit(event.PromptSent, in.Now, event.PromptSentData{
-			Hash:         prompt.Hash(in.Salt, h.Prompt),
+			Hash:         prompt.Hash(prompt.Key(in.Salt, m.session(), in.Now), h.Prompt),
 			ApprovalLike: prompt.ApprovalLike(h.Prompt),
 		})
 		m.emit(event.AgentTurnStart, in.Now, event.AgentTurnStartData{TurnID: h.PromptID})
@@ -143,15 +143,19 @@ type mapper struct {
 	out []event.Event
 }
 
+func (m *mapper) session() string {
+	if m.in.Session != "" {
+		return m.in.Session
+	}
+	return m.in.Hook.SessionID
+}
+
 func (m *mapper) emit(kind event.Kind, ts time.Time, data any) {
 	e, err := event.New(kind, ts, data)
 	if err != nil {
 		panic(err) // unknown kind, a bug here
 	}
-	e.SessionID = m.in.Session
-	if e.SessionID == "" {
-		e.SessionID = m.in.Hook.SessionID
-	}
+	e.SessionID = m.session()
 	e.ProjectID = m.in.ProjectID
 	e.Harness = Harness
 	e.Source = event.SourceAdapter

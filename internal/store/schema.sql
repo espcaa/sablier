@@ -7,7 +7,9 @@ CREATE TABLE IF NOT EXISTS events (
     harness     TEXT    NOT NULL,
     source      TEXT    NOT NULL,
     data        TEXT    NOT NULL DEFAULT '{}',     -- json payload
-    uploaded_at INTEGER                            -- unix ms, null until sent
+    uploaded_at INTEGER,                           -- unix ms, null until sent
+    prev_hash   TEXT,                              -- chain, see event.ChainHash. null before the chain
+    hash        TEXT
 );
 
 CREATE INDEX IF NOT EXISTS events_ts ON events (ts);

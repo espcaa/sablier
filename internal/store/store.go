@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/espcaa/sablier/internal/event"
@@ -46,7 +47,22 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("apply schema: %w", err)
 	}
+	if err := addChainColumns(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate: %w", err)
+	}
 	return &Store{db: db, q: sqlc.New(db)}, nil
+}
+
+// databases from before the chain. two processes can race here, so a column that's already there is fine
+func addChainColumns(db *sql.DB) error {
+	for _, col := range []string{"prev_hash", "hash"} {
+		_, err := db.Exec("ALTER TABLE events ADD COLUMN " + col + " TEXT")
+		if err != nil && !strings.Contains(err.Error(), "duplicate column") {
+			return err
+		}
+	}
+	return nil
 }
 
 // busy_timeout doesn't cover switching to wal, so racing first opens retry
@@ -107,7 +123,21 @@ func (t *Tx) Append(ctx context.Context, e event.Event) (event.Event, error) {
 		return e, err
 	}
 	e.Seq = seq
-	return e, nil
+	e.Data = []byte(data)
+
+	// the insert holds the write lock, so the event before this one can't change
+	if e.PrevHash, err = t.q.PrevHash(ctx, seq); err != nil {
+		return e, err
+	}
+	if e.Hash, err = event.ChainHash(e.PrevHash, e); err != nil {
+		return e, err
+	}
+	err = t.q.SetHash(ctx, sqlc.SetHashParams{
+		PrevHash: sql.NullString{String: e.PrevHash, Valid: true},
+		Hash:     sql.NullString{String: e.Hash, Valid: true},
+		Seq:      seq,
+	})
+	return e, err
 }
 
 func (t *Tx) SessionState(ctx context.Context, sessionID string) ([]byte, error) {
@@ -141,6 +171,42 @@ func (s *Store) Salt(ctx context.Context) ([]byte, error) {
 // random uuid naming this machine on the server so that seq numbers are separated per machine
 func (s *Store) InstallID(ctx context.Context) (string, error) {
 	return s.meta(ctx, "install_id", uuid.NewString())
+}
+
+// when the server's chain for this machine no longer matches, like after restoring an old
+// backup or copying the db to another machine: a new install id, with the unsent events
+// chained again from scratch. does nothing if the id isn't old anymore, another sync did it
+func (s *Store) NewInstall(ctx context.Context, old string) error {
+	return s.Update(ctx, func(tx *Tx) error {
+		cur, err := tx.q.GetMeta(ctx, "install_id")
+		if err != nil || cur != old {
+			return err
+		}
+		if err := tx.q.SetMeta(ctx, sqlc.SetMetaParams{Key: "install_id", Value: uuid.NewString()}); err != nil {
+			return err
+		}
+		rows, err := tx.q.UnsentEvents(ctx)
+		if err != nil {
+			return err
+		}
+		prev := ""
+		for _, e := range fromRows(rows) {
+			hash, err := event.ChainHash(prev, e)
+			if err != nil {
+				return err
+			}
+			err = tx.q.SetHash(ctx, sqlc.SetHashParams{
+				PrevHash: sql.NullString{String: prev, Valid: true},
+				Hash:     sql.NullString{String: hash, Valid: true},
+				Seq:      e.Seq,
+			})
+			if err != nil {
+				return err
+			}
+			prev = hash
+		}
+		return nil
+	})
 }
 
 // value for key, "" if never set
@@ -232,6 +298,8 @@ func fromRows(rows []sqlc.Event) []event.Event {
 			Harness:   r.Harness,
 			Source:    event.Source(r.Source),
 			Data:      []byte(r.Data),
+			PrevHash:  r.PrevHash.String,
+			Hash:      r.Hash.String,
 		}
 	}
 	return out

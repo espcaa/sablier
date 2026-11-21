@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -165,5 +166,48 @@ func TestInstallID(t *testing.T) {
 	b, _ := s.InstallID(ctx)
 	if a != b || len(a) != 36 || a[14] != '4' {
 		t.Fatalf("got %q then %q", a, b)
+	}
+}
+
+// a database from before the chain keeps its events, new ones start a chain after them
+func TestChainAfterOldDatabase(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sablier.db")
+	old, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = old.Exec(`CREATE TABLE events (
+		seq INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, kind TEXT NOT NULL,
+		session_id TEXT NOT NULL, project_id TEXT NOT NULL, harness TEXT NOT NULL,
+		source TEXT NOT NULL, data TEXT NOT NULL DEFAULT '{}', uploaded_at INTEGER);
+		INSERT INTO events (ts, kind, session_id, project_id, harness, source) VALUES (1, 'focus', 's1', 'p1', 'claude-code', 'launcher');`)
+	old.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+	t0 := time.Date(2026, 11, 21, 10, 0, 0, 123456789, time.UTC)
+	for i := range 3 {
+		if _, err := s.Append(ctx, mk(t, t0.Add(time.Duration(i)*time.Second))); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	es, _ := s.Pending(ctx, 10)
+	if len(es) != 4 || es[0].Hash != "" || es[1].PrevHash != "" {
+		t.Fatalf("got %+v", es)
+	}
+	// what the server will check, from what it receives
+	for i, e := range es[1:] {
+		want, _ := event.ChainHash(e.PrevHash, e)
+		if e.Hash != want || (i > 0 && e.PrevHash != es[i].Hash) {
+			t.Fatalf("event %d doesn't chain: %+v", e.Seq, e)
+		}
 	}
 }

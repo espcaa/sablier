@@ -16,6 +16,8 @@ import (
 
 var ErrUnauthorized = errors.New("invalid api key")
 
+var ErrConflict = errors.New("conflict")
+
 type Client struct {
 	URL  string
 	Key  string
@@ -75,6 +77,9 @@ func (c *Client) do(ctx context.Context, method, path string, body io.Reader, ou
 		json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&e)
 		if e.Error == "" {
 			e.Error = resp.Status
+		}
+		if resp.StatusCode == http.StatusConflict {
+			return fmt.Errorf("%w: %s", ErrConflict, e.Error)
 		}
 		return fmt.Errorf("server: %s", e.Error)
 	}

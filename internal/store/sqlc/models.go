@@ -18,6 +18,8 @@ type Event struct {
 	Source     string
 	Data       string
 	UploadedAt sql.NullInt64
+	PrevHash   sql.NullString
+	Hash       sql.NullString
 }
 
 type Meta struct {

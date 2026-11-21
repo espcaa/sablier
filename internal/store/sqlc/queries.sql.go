@@ -27,7 +27,7 @@ func (q *Queries) CountSessionEvents(ctx context.Context, arg CountSessionEvents
 }
 
 const eventsBetween = `-- name: EventsBetween :many
-SELECT seq, ts, kind, session_id, project_id, harness, source, data, uploaded_at FROM events
+SELECT seq, ts, kind, session_id, project_id, harness, source, data, uploaded_at, prev_hash, hash FROM events
 WHERE ts >= ?1 AND ts < ?2
 ORDER BY ts, seq
 `
@@ -56,6 +56,8 @@ func (q *Queries) EventsBetween(ctx context.Context, arg EventsBetweenParams) ([
 			&i.Source,
 			&i.Data,
 			&i.UploadedAt,
+			&i.PrevHash,
+			&i.Hash,
 		); err != nil {
 			return nil, err
 		}
@@ -165,7 +167,7 @@ func (q *Queries) MarkUploaded(ctx context.Context, arg MarkUploadedParams) erro
 }
 
 const pendingEvents = `-- name: PendingEvents :many
-SELECT seq, ts, kind, session_id, project_id, harness, source, data, uploaded_at FROM events
+SELECT seq, ts, kind, session_id, project_id, harness, source, data, uploaded_at, prev_hash, hash FROM events
 WHERE uploaded_at IS NULL
 ORDER BY seq
 LIMIT ?
@@ -190,6 +192,8 @@ func (q *Queries) PendingEvents(ctx context.Context, limit int64) ([]Event, erro
 			&i.Source,
 			&i.Data,
 			&i.UploadedAt,
+			&i.PrevHash,
+			&i.Hash,
 		); err != nil {
 			return nil, err
 		}
@@ -202,6 +206,18 @@ func (q *Queries) PendingEvents(ctx context.Context, limit int64) ([]Event, erro
 		return nil, err
 	}
 	return items, nil
+}
+
+const prevHash = `-- name: PrevHash :one
+SELECT CAST(COALESCE((SELECT hash FROM events WHERE seq < ? ORDER BY seq DESC LIMIT 1), '') AS TEXT)
+`
+
+// the chain links to the latest event before seq, "" when there's none or it's from before the chain
+func (q *Queries) PrevHash(ctx context.Context, seq int64) (string, error) {
+	row := q.db.QueryRowContext(ctx, prevHash, seq)
+	var column_1 string
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const putSessionState = `-- name: PutSessionState :exec
@@ -217,6 +233,21 @@ type PutSessionStateParams struct {
 
 func (q *Queries) PutSessionState(ctx context.Context, arg PutSessionStateParams) error {
 	_, err := q.db.ExecContext(ctx, putSessionState, arg.SessionID, arg.Data, arg.UpdatedAt)
+	return err
+}
+
+const setHash = `-- name: SetHash :exec
+UPDATE events SET prev_hash = ?, hash = ? WHERE seq = ?
+`
+
+type SetHashParams struct {
+	PrevHash sql.NullString
+	Hash     sql.NullString
+	Seq      int64
+}
+
+func (q *Queries) SetHash(ctx context.Context, arg SetHashParams) error {
+	_, err := q.db.ExecContext(ctx, setHash, arg.PrevHash, arg.Hash, arg.Seq)
 	return err
 }
 
@@ -267,4 +298,43 @@ func (q *Queries) SyncStatus(ctx context.Context) (SyncStatusRow, error) {
 	var i SyncStatusRow
 	err := row.Scan(&i.Pending, &i.LastUpload)
 	return i, err
+}
+
+const unsentEvents = `-- name: UnsentEvents :many
+SELECT seq, ts, kind, session_id, project_id, harness, source, data, uploaded_at, prev_hash, hash FROM events WHERE uploaded_at IS NULL ORDER BY seq
+`
+
+func (q *Queries) UnsentEvents(ctx context.Context) ([]Event, error) {
+	rows, err := q.db.QueryContext(ctx, unsentEvents)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Event
+	for rows.Next() {
+		var i Event
+		if err := rows.Scan(
+			&i.Seq,
+			&i.Ts,
+			&i.Kind,
+			&i.SessionID,
+			&i.ProjectID,
+			&i.Harness,
+			&i.Source,
+			&i.Data,
+			&i.UploadedAt,
+			&i.PrevHash,
+			&i.Hash,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

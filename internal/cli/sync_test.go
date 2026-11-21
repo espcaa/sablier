@@ -118,3 +118,51 @@ func TestSyncNotSignedIn(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+func TestSyncNewInstallOnConflict(t *testing.T) {
+	ctx := context.Background()
+	s, err := store.Open(filepath.Join(t.TempDir(), "sablier.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	for i := range 3 {
+		e, _ := event.New(event.Focus, time.Now().Add(time.Duration(i)*time.Second), event.FocusData{In: true})
+		if _, err := s.Append(ctx, e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	old, _ := s.InstallID(ctx)
+
+	var got []api.Batch
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var b api.Batch
+		json.NewDecoder(r.Body).Decode(&b)
+		got = append(got, b)
+		if b.InstallID == old {
+			w.WriteHeader(http.StatusConflict)
+			json.NewEncoder(w).Encode(map[string]string{"error": "event 1: differs from the one already received"})
+			return
+		}
+		json.NewEncoder(w).Encode(api.Result{Accepted: len(b.Events)})
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	if err := syncEvents(ctx, s, api.New(srv.URL, "sab_good"), &out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "new install") || !strings.Contains(out.String(), "synced 3 events") {
+		t.Fatalf("output: %s", out.String())
+	}
+	sent := got[len(got)-1]
+	if sent.InstallID == old || sent.Events[0].PrevHash != "" {
+		t.Fatalf("not a fresh chain on a new install: %+v", sent)
+	}
+	for i, e := range sent.Events {
+		want, _ := event.ChainHash(e.PrevHash, e)
+		if e.Hash != want || (i > 0 && e.PrevHash != sent.Events[i-1].Hash) {
+			t.Fatalf("event %d doesn't chain", e.Seq)
+		}
+	}
+}

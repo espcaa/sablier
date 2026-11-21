@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/espcaa/sablier/internal/event"
+	"github.com/espcaa/sablier/internal/prompt"
 )
 
 var t0 = time.Date(2026, 11, 19, 17, 0, 0, 0, time.UTC)
@@ -46,7 +47,7 @@ func describe(t *testing.T, events []event.Event) string {
 			t.Fatal(err)
 		}
 		// hashes are tested in the prompt package
-		if ps, ok := p.(*event.PromptSentData); ok && len(ps.Hash) == 32 {
+		if ps, ok := p.(*event.PromptSentData); ok && len(ps.Hash) == 64 {
 			ps.Hash = "<hash>"
 		}
 		fmt.Fprintf(&b, "%g %s %+v\n", e.TS.Sub(t0).Seconds(), e.Kind, p)
@@ -225,5 +226,15 @@ func TestLaunchSession(t *testing.T) {
 	p, _ := out[0].Payload()
 	if p.(*event.SessionStartData).HarnessSession != "claude-1" {
 		t.Fatalf("claude's session id lost: %+v", p)
+	}
+}
+
+func TestPromptHashFromStoredEvent(t *testing.T) {
+	got := run(t, step{1.0005, Hook{Event: "UserPromptSubmit", PromptID: "p1", Prompt: "Fix the test"}})
+	e := got[0]
+	p, _ := e.Payload()
+	stored := time.UnixMilli(e.TS.UnixMilli())
+	if want := prompt.Hash(prompt.Key([]byte("test-salt"), e.SessionID, stored), "fix the test"); p.(*event.PromptSentData).Hash != want {
+		t.Fatal("prompt hash can't be rebuilt from the stored event")
 	}
 }

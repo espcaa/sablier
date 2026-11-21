@@ -3,6 +3,13 @@ INSERT INTO events (ts, kind, session_id, project_id, harness, source, data)
 VALUES (?, ?, ?, ?, ?, ?, ?)
 RETURNING seq;
 
+-- the chain links to the latest event before seq, "" when there's none or it's from before the chain
+-- name: PrevHash :one
+SELECT CAST(COALESCE((SELECT hash FROM events WHERE seq < ? ORDER BY seq DESC LIMIT 1), '') AS TEXT);
+
+-- name: SetHash :exec
+UPDATE events SET prev_hash = ?, hash = ? WHERE seq = ?;
+
 -- name: EventsBetween :many
 SELECT * FROM events
 WHERE ts >= sqlc.arg(from_ts) AND ts < sqlc.arg(to_ts)
@@ -16,6 +23,9 @@ SELECT * FROM events
 WHERE uploaded_at IS NULL
 ORDER BY seq
 LIMIT ?;
+
+-- name: UnsentEvents :many
+SELECT * FROM events WHERE uploaded_at IS NULL ORDER BY seq;
 
 -- name: MarkAllPending :exec
 UPDATE events SET uploaded_at = NULL;

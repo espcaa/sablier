@@ -56,8 +56,8 @@ func (q *Queries) DeleteSession(ctx context.Context, tokenHash []byte) error {
 }
 
 const insertEvent = `-- name: InsertEvent :execrows
-INSERT INTO events (install_id, seq, ts, kind, session_id, project_id, harness, source, data)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+INSERT INTO events (install_id, seq, ts, kind, session_id, project_id, harness, source, data, prev_hash, hash)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 ON CONFLICT (install_id, seq) DO NOTHING
 `
 
@@ -71,6 +71,8 @@ type InsertEventParams struct {
 	Harness   string
 	Source    string
 	Data      []byte
+	PrevHash  pgtype.Text
+	Hash      pgtype.Text
 }
 
 // retries are safe: a seq already stored is skipped
@@ -85,11 +87,30 @@ func (q *Queries) InsertEvent(ctx context.Context, arg InsertEventParams) (int64
 		arg.Harness,
 		arg.Source,
 		arg.Data,
+		arg.PrevHash,
+		arg.Hash,
 	)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const installHead = `-- name: InstallHead :one
+SELECT head_seq, head_hash FROM installs WHERE id = $1 FOR UPDATE
+`
+
+type InstallHeadRow struct {
+	HeadSeq  pgtype.Int8
+	HeadHash pgtype.Text
+}
+
+// locked until the batch commits, so two syncs can't both extend the chain
+func (q *Queries) InstallHead(ctx context.Context, id pgtype.UUID) (InstallHeadRow, error) {
+	row := q.db.QueryRow(ctx, installHead, id)
+	var i InstallHeadRow
+	err := row.Scan(&i.HeadSeq, &i.HeadHash)
+	return i, err
 }
 
 const sessionModels = `-- name: SessionModels :many
@@ -143,6 +164,37 @@ type SetAPIKeyParams struct {
 func (q *Queries) SetAPIKey(ctx context.Context, arg SetAPIKeyParams) error {
 	_, err := q.db.Exec(ctx, setAPIKey, arg.ID, arg.ApiKey)
 	return err
+}
+
+const setInstallHead = `-- name: SetInstallHead :exec
+UPDATE installs SET head_seq = $2, head_hash = $3 WHERE id = $1
+`
+
+type SetInstallHeadParams struct {
+	ID       pgtype.UUID
+	HeadSeq  pgtype.Int8
+	HeadHash pgtype.Text
+}
+
+func (q *Queries) SetInstallHead(ctx context.Context, arg SetInstallHeadParams) error {
+	_, err := q.db.Exec(ctx, setInstallHead, arg.ID, arg.HeadSeq, arg.HeadHash)
+	return err
+}
+
+const storedEventHash = `-- name: StoredEventHash :one
+SELECT hash FROM events WHERE install_id = $1 AND seq = $2
+`
+
+type StoredEventHashParams struct {
+	InstallID pgtype.UUID
+	Seq       int64
+}
+
+func (q *Queries) StoredEventHash(ctx context.Context, arg StoredEventHashParams) (pgtype.Text, error) {
+	row := q.db.QueryRow(ctx, storedEventHash, arg.InstallID, arg.Seq)
+	var hash pgtype.Text
+	err := row.Scan(&hash)
+	return hash, err
 }
 
 const upsertProject = `-- name: UpsertProject :exec
@@ -230,7 +282,7 @@ func (q *Queries) UserBySession(ctx context.Context, tokenHash []byte) (User, er
 }
 
 const userEventsBetween = `-- name: UserEventsBetween :many
-SELECT e.install_id, e.seq, e.ts, e.kind, e.session_id, e.project_id, e.harness, e.source, e.data, e.received_at FROM events e
+SELECT e.install_id, e.seq, e.ts, e.kind, e.session_id, e.project_id, e.harness, e.source, e.data, e.received_at, e.prev_hash, e.hash FROM events e
 JOIN installs i ON i.id = e.install_id
 WHERE i.user_id = $1 AND e.ts >= $2 AND e.ts < $3
 ORDER BY e.ts, e.seq
@@ -262,6 +314,8 @@ func (q *Queries) UserEventsBetween(ctx context.Context, arg UserEventsBetweenPa
 			&i.Source,
 			&i.Data,
 			&i.ReceivedAt,
+			&i.PrevHash,
+			&i.Hash,
 		); err != nil {
 			return nil, err
 		}

@@ -19,6 +19,8 @@ type Event struct {
 	Source     string
 	Data       []byte
 	ReceivedAt pgtype.Timestamptz
+	PrevHash   pgtype.Text
+	Hash       pgtype.Text
 }
 
 type Install struct {
@@ -26,6 +28,8 @@ type Install struct {
 	UserID     string
 	CreatedAt  pgtype.Timestamptz
 	LastSeenAt pgtype.Timestamptz
+	HeadSeq    pgtype.Int8
+	HeadHash   pgtype.Text
 }
 
 type Project struct {

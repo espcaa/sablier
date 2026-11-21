@@ -56,7 +56,7 @@ func syncEvents(ctx context.Context, s *store.Store, client *api.Client, out io.
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	total, err := upload(ctx, s, client)
+	total, err := upload(ctx, s, client, out)
 	if err != nil {
 		return err
 	}
@@ -72,14 +72,16 @@ func syncEvents(ctx context.Context, s *store.Store, client *api.Client, out io.
 	return nil
 }
 
-// sends every pending event in batches, marking each batch once the server has it
-func upload(ctx context.Context, s *store.Store, client *api.Client) (api.Result, error) {
+// sends every pending event in batches, marking each batch once the server has it.
+// notice gets told when this machine had to start a new install
+func upload(ctx context.Context, s *store.Store, client *api.Client, notice io.Writer) (api.Result, error) {
 	var total api.Result
 	install, err := s.InstallID(ctx)
 	if err != nil {
 		return total, err
 	}
 
+	switched := false
 	for {
 		pending, err := s.Pending(ctx, api.MaxBatch)
 		if err != nil {
@@ -91,6 +93,18 @@ func upload(ctx context.Context, s *store.Store, client *api.Client) (api.Result
 		res, err := client.Upload(ctx, api.Batch{InstallID: install, Events: pending, Projects: projectsOf(pending)})
 		if errors.Is(err, api.ErrUnauthorized) {
 			return total, errors.New("api key rejected, run sablier login again")
+		}
+		if errors.Is(err, api.ErrConflict) && !switched {
+			// once, so a server that keeps refusing doesn't make installs forever
+			if err := s.NewInstall(ctx, install); err != nil {
+				return total, err
+			}
+			if install, err = s.InstallID(ctx); err != nil {
+				return total, err
+			}
+			switched = true
+			fmt.Fprintln(notice, "sablier: the server has different events for this machine (restored backup or copied database?), continuing as a new install")
+			continue
 		}
 		if err != nil {
 			return total, err

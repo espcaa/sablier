@@ -19,9 +19,19 @@ RETURNING id;
 
 -- retries are safe: a seq already stored is skipped
 -- name: InsertEvent :execrows
-INSERT INTO events (install_id, seq, ts, kind, session_id, project_id, harness, source, data)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+INSERT INTO events (install_id, seq, ts, kind, session_id, project_id, harness, source, data, prev_hash, hash)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 ON CONFLICT (install_id, seq) DO NOTHING;
+
+-- locked until the batch commits, so two syncs can't both extend the chain
+-- name: InstallHead :one
+SELECT head_seq, head_hash FROM installs WHERE id = $1 FOR UPDATE;
+
+-- name: SetInstallHead :exec
+UPDATE installs SET head_seq = $2, head_hash = $3 WHERE id = $1;
+
+-- name: StoredEventHash :one
+SELECT hash FROM events WHERE install_id = $1 AND seq = $2;
 
 -- name: UserEventsBetween :many
 SELECT e.* FROM events e
