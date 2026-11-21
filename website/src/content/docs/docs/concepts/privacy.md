@@ -15,17 +15,47 @@ description: Are we evil,,,
 
 Sablier works with a bunch of events, heartbeats that we use along with some heuristics to calculate the time you spent on something. (The server's algorithm is the same as the one used in `sablier today`)
 
-| Event            | Data                                                                        |
-| ---------------- | --------------------------------------------------------------------------- |
-| input            | window length, key count, scroll and click count, whether you pasted        |
-| focus            | in or out                                                                   |
-| prompt           | the hash, whether it was queued, whether it was a short approval like "yes" |
-| turn start / end | the agent's turn id, and why it ended                                       |
-| tool call        | its category (shell, edit, read, web, agent, other) and duration            |
-| approval         | allowed or not, how long you took, the tool's category                      |
-| session start    | the agent's own session id, and the model when it reports one               |
+`sablier sync` sends them in batches of up to 500, with your api key and a `sablier/<version> (<os>/<arch>)` user agent:
 
-Your machine also gets a random install id.
+```json
+{
+  "install_id": "3f2c9a1e-…",
+  "events": [ … ],
+  "projects": [{ "id": "github.com/espcaa/sablier", "name": "sablier" }]
+}
+```
+
+`install_id` is a random id made once per machine. `projects` gives each project id a display name.
+
+Every event has these fields:
+
+| Field        | What it is                                                                                    |
+| ------------ | --------------------------------------------------------------------------------------------- |
+| `seq`        | a counter per machine, 1, 2, 3…                                                               |
+| `ts`         | when it happened, in utc                                                                      |
+| `kind`       | one of the kinds below                                                                        |
+| `session_id` | `run:` and a random id, new every time you start an agent through sablier                     |
+| `project_id` | the first line of a `.sablier-project` or `.wakatime-project` file, else the git remote (like `github.com/espcaa/sablier`), else the folder name |
+| `harness`    | `claude-code`, `codex` or `opencode`                                                          |
+| `source`     | `launcher` for your terminal input, `adapter` for what the agent reports                      |
+| `data`       | depends on the kind                                                                           |
+
+And the `data` for each kind, exactly:
+
+| Kind               | `data`                                                                                                     |
+| ------------------ | ---------------------------------------------------------------------------------------------------------- |
+| `session_start`    | `{"model": "claude-opus-5-5", "harness_session": "…"}`, the agent's own session id and the model when it reports one |
+| `session_end`      | `{"reason": "exit"}`                                                                                       |
+| `input_tick`       | `{"window_ms": 5000, "keys": 42, "mouse": 3, "pasted": false}`, how many keys, scrolls and clicks, never which ones |
+| `focus`            | `{"in": true}` when you come back to the terminal, `false` when you leave                                  |
+| `prompt_sent`      | `{"pasted": false, "compose_ms": 0, "queued": false, "approval_like": false, "hash": "…"}`                 |
+| `approval`         | `{"allow": true, "latency_ms": 2300, "tool": "shell"}`, allowed or not and how long you took               |
+| `interrupt`        | `{}`                                                                                                       |
+| `agent_turn_start` | `{"turn_id": "…"}`                                                                                         |
+| `agent_turn_end`   | `{"turn_id": "…", "reason": "done"}`, or `interrupted`, `error`, `closed`                                  |
+| `tool_call`        | `{"tool": "edit", "duration_ms": 840}`, the tool is `shell`, `edit`, `read`, `web`, `agent` or `other`     |
+
+The prompt `hash` is an hmac-sha256 of the prompt (lowercased, spaces squashed) with a salt that never leaves your machine, so we can't reverse it, only see that two prompts were the same.
 
 ## What's stored on your device
 

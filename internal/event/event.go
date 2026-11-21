@@ -19,7 +19,6 @@ const (
 	AgentTurnStart Kind = "agent_turn_start"
 	AgentTurnEnd   Kind = "agent_turn_end"
 	ToolCall       Kind = "tool_call"
-	GitCommit      Kind = "git_commit"
 )
 
 type Source string
@@ -35,8 +34,8 @@ type Event struct {
 	TS        time.Time       `json:"ts"`
 	Kind      Kind            `json:"kind"`
 	SessionID string          `json:"session_id"`
-	ProjectID string          `json:"project_id"` // salted hash of repo root
-	Harness   string          `json:"harness"`    // "claude-code", "codex", "unknown", ...
+	ProjectID string          `json:"project_id"`
+	Harness   string          `json:"harness"` // "claude-code", "codex", "unknown", ...
 	Source    Source          `json:"source"`
 	Data      json.RawMessage `json:"data,omitempty"`
 }
@@ -95,11 +94,6 @@ type ToolCallData struct {
 	DurationMs int64        `json:"duration_ms"`
 }
 
-type GitCommitData struct {
-	SHA  string    `json:"sha"`
-	Time time.Time `json:"time"`
-}
-
 type ToolCategory string
 
 const (
@@ -122,7 +116,6 @@ var payloads = map[Kind]func() any{
 	AgentTurnStart: func() any { return &AgentTurnStartData{} },
 	AgentTurnEnd:   func() any { return &AgentTurnEndData{} },
 	ToolCall:       func() any { return &ToolCallData{} },
-	GitCommit:      func() any { return &GitCommitData{} },
 }
 
 func (k Kind) Valid() bool {
