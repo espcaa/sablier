@@ -147,12 +147,9 @@ func (s *Server) cliDone(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Query().Get("error") {
 	case "":
 	case "access_denied":
-		d.Error = "You cancelled it, nothing was shared."
+		d.Error = "You cancelled it"
 	default:
-		d.Error = "The CLI couldn't finish signing in."
-	}
-	if u := s.currentUser(r); u != nil {
-		d.Name = u.Name
+		d.Error = "Something went wrong"
 	}
 	views.CLIDone(d).Render(r.Context(), w)
 }

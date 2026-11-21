@@ -19,8 +19,7 @@ type Consent struct {
 }
 
 type Done struct {
-	Name  string
-	Error string // set when the login didn't go through
+	Error string
 }
 
 func firstName(name string) string {
@@ -60,27 +59,27 @@ func CLIConsent(c Consent) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<a class=\"small-name\" href=\"/\">sablier</a><section class=\"card\"><h1>Sign in to the sablier CLI?</h1><p class=\"muted\">Signed in as <strong>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<a class=\"small-name\" href=\"/\">sablier</a><section class=\"card\"><h1>Sign in to the sablier CLI?</h1><p class=\"muted\">You're ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var3 string
 			templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(firstName(c.Name))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/server/views/cli.templ`, Line: 28, Col: 44}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/server/views/cli.templ`, Line: 26, Col: 46}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "</strong>. The CLI on this computer is asking to use your account.</p><ul class=\"perms\"><li>Upload the time you spend with your coding agents</li><li>Read your name and today's total</li><li>Save your API key in <code>~/.sablier.cfg</code></li></ul><p class=\"muted small\">Only allow this if you just ran <code>sablier login</code> yourself.</p><form method=\"post\" action=\"/cli/authorize\" class=\"actions\"><input type=\"hidden\" name=\"port\" value=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, ". Only allow this if you just ran <code>sablier login</code>.</p><form method=\"post\" action=\"/cli/authorize\" class=\"actions\"><input type=\"hidden\" name=\"port\" value=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var4 string
 			templ_7745c5c3_Var4, templ_7745c5c3_Err = templruntime.NewAttributeExpression(c.Port).Resolve(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/server/views/cli.templ`, Line: 38, Col: 51}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/server/views/cli.templ`, Line: 28, Col: 51}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var4)
 			if templ_7745c5c3_Err != nil {
@@ -93,7 +92,7 @@ func CLIConsent(c Consent) templ.Component {
 			var templ_7745c5c3_Var5 string
 			templ_7745c5c3_Var5, templ_7745c5c3_Err = templruntime.NewAttributeExpression(c.State).Resolve(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/server/views/cli.templ`, Line: 39, Col: 53}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/server/views/cli.templ`, Line: 29, Col: 53}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var5)
 			if templ_7745c5c3_Err != nil {
@@ -106,7 +105,7 @@ func CLIConsent(c Consent) templ.Component {
 			var templ_7745c5c3_Var6 string
 			templ_7745c5c3_Var6, templ_7745c5c3_Err = templruntime.NewAttributeExpression(c.Challenge).Resolve(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/server/views/cli.templ`, Line: 40, Col: 66}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/server/views/cli.templ`, Line: 30, Col: 66}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var6)
 			if templ_7745c5c3_Err != nil {
@@ -164,54 +163,30 @@ func CLIDone(d Done) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			if d.Error == "" {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<div class=\"mark ok\" aria-hidden=\"true\"><svg viewBox=\"0 0 24 24\" width=\"36\" height=\"36\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 12.5l4.5 4.5L19 7.5\"></path></svg></div><h1>")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				if d.Name != "" {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "You're signed in, ")
-					if templ_7745c5c3_Err != nil {
-						return templ_7745c5c3_Err
-					}
-					var templ_7745c5c3_Var9 string
-					templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(firstName(d.Name))
-					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/server/views/cli.templ`, Line: 60, Col: 43}
-					}
-					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
-					if templ_7745c5c3_Err != nil {
-						return templ_7745c5c3_Err
-					}
-				} else {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "You're signed in")
-					if templ_7745c5c3_Err != nil {
-						return templ_7745c5c3_Err
-					}
-				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</h1><p class=\"muted\">The CLI is connected to your account. You can close this tab and go back to your terminal.</p><pre class=\"hint\"><code><span class=\"prompt\">$</span> sablier claude</code></pre><a class=\"button quiet\" href=\"/app\">Open your dashboard</a>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<div class=\"mark ok\" aria-hidden=\"true\"><svg viewBox=\"0 0 24 24\" width=\"36\" height=\"36\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 12.5l4.5 4.5L19 7.5\"></path></svg></div><h1>You're signed in!</h1>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			} else {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "<div class=\"mark bad\" aria-hidden=\"true\"><svg viewBox=\"0 0 24 24\" width=\"36\" height=\"36\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\" stroke-linecap=\"round\"><path d=\"M7 7l10 10M17 7L7 17\"></path></svg></div><h1>Sign in didn't finish</h1><p class=\"muted\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<div class=\"mark bad\" aria-hidden=\"true\"><svg viewBox=\"0 0 24 24\" width=\"36\" height=\"36\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\" stroke-linecap=\"round\"><path d=\"M7 7l10 10M17 7L7 17\"></path></svg></div><h1>Sign in didn't finish</h1><p class=\"muted\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				var templ_7745c5c3_Var10 string
-				templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(d.Error)
+				var templ_7745c5c3_Var9 string
+				templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(d.Error)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/server/views/cli.templ`, Line: 73, Col: 30}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/server/views/cli.templ`, Line: 54, Col: 30}
 				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "</p><p class=\"muted\">Run <code>sablier login</code> again, or use <code>sablier login --key</code> to paste your API key.</p>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, ". Try <code>sablier login</code> again.</p>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "</section>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</section>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -242,7 +217,7 @@ func cliStyles() templ.Component {
 		}
 		ctx = templ.InitializeContext(ctx)
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "<style>\n\t\t.card {\n\t\t\twidth: 100%;\n\t\t\tmargin-top: 1.5rem;\n\t\t\tpadding: 2rem;\n\t\t\tbackground: var(--color-surface);\n\t\t\tborder: 1px solid var(--color-border);\n\t\t\tborder-radius: calc(var(--radius) * 2);\n\t\t\tdisplay: flex;\n\t\t\tflex-direction: column;\n\t\t\tgap: 1rem;\n\t\t}\n\t\t.card h1 {\n\t\t\tfont-size: 1.5rem;\n\t\t\tfont-weight: 600;\n\t\t\tletter-spacing: -0.02em;\n\t\t\tline-height: 1.2;\n\t\t}\n\t\t.small {\n\t\t\tfont-size: 0.85rem;\n\t\t}\n\t\t.perms {\n\t\t\tlist-style: none;\n\t\t\tpadding: 0;\n\t\t\tmargin: 0;\n\t\t\tborder-top: 1px solid var(--color-border);\n\t\t}\n\t\t.perms li {\n\t\t\tpadding: 0.6rem 0 0.6rem 1.6rem;\n\t\t\tborder-bottom: 1px solid var(--color-border);\n\t\t\tposition: relative;\n\t\t}\n\t\t.perms li::before {\n\t\t\tcontent: \"\";\n\t\t\tposition: absolute;\n\t\t\tleft: 0.2rem;\n\t\t\ttop: 1.05rem;\n\t\t\twidth: 0.55rem;\n\t\t\theight: 0.55rem;\n\t\t\tborder-radius: 50%;\n\t\t\tbackground: var(--color-accent);\n\t\t}\n\t\t.actions {\n\t\t\tdisplay: flex;\n\t\t\tjustify-content: flex-end;\n\t\t\tgap: 0.75rem;\n\t\t\tmargin-top: 0.5rem;\n\t\t}\n\t\t.actions .button.quiet {\n\t\t\tpadding: 0.6rem 1.4rem;\n\t\t}\n\t\t.done {\n\t\t\talign-items: center;\n\t\t\ttext-align: center;\n\t\t}\n\t\t.mark {\n\t\t\twidth: 4.5rem;\n\t\t\theight: 4.5rem;\n\t\t\tborder-radius: 50%;\n\t\t\tdisplay: grid;\n\t\t\tplace-items: center;\n\t\t\tcolor: var(--color-surface);\n\t\t}\n\t\t.mark.ok {\n\t\t\tbackground: var(--color-accent);\n\t\t\tanimation: pop 400ms cubic-bezier(.2, 1.4, .4, 1);\n\t\t}\n\t\t.mark.bad {\n\t\t\tbackground: var(--color-danger);\n\t\t}\n\t\t@keyframes pop {\n\t\t\tfrom { transform: scale(0.4); opacity: 0; }\n\t\t}\n\t\t@media (prefers-reduced-motion: reduce) {\n\t\t\t.mark.ok { animation: none; }\n\t\t}\n\t\t.hint {\n\t\t\tmargin: 0;\n\t\t\tpadding: 0.6rem 1rem;\n\t\t\tbackground: var(--color-canvas);\n\t\t\tborder: 1px solid var(--color-border);\n\t\t\tborder-radius: var(--radius);\n\t\t\tfont-size: 0.9rem;\n\t\t}\n\t\t.hint .prompt {\n\t\t\tcolor: var(--color-muted);\n\t\t\tuser-select: none;\n\t\t}\n\t</style>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "<style>\n\t\t.card {\n\t\t\twidth: 100%;\n\t\t\tmargin-top: 1.5rem;\n\t\t\tpadding: 2rem;\n\t\t\tbackground: var(--color-surface);\n\t\t\tborder: 1px solid var(--color-border);\n\t\t\tborder-radius: calc(var(--radius) * 2);\n\t\t\tdisplay: flex;\n\t\t\tflex-direction: column;\n\t\t\tgap: 1rem;\n\t\t}\n\t\t.card h1 {\n\t\t\tfont-size: 1.5rem;\n\t\t\tfont-weight: 600;\n\t\t\tletter-spacing: -0.02em;\n\t\t\tline-height: 1.2;\n\t\t}\n\t\t.actions {\n\t\t\tdisplay: flex;\n\t\t\tjustify-content: flex-end;\n\t\t\tgap: 0.75rem;\n\t\t\tmargin-top: 0.5rem;\n\t\t}\n\t\t.actions .button.quiet {\n\t\t\tpadding: 0.6rem 1.4rem;\n\t\t}\n\t\t.done {\n\t\t\talign-items: center;\n\t\t\ttext-align: center;\n\t\t}\n\t\t.mark {\n\t\t\twidth: 4.5rem;\n\t\t\theight: 4.5rem;\n\t\t\tborder-radius: 50%;\n\t\t\tdisplay: grid;\n\t\t\tplace-items: center;\n\t\t\tcolor: var(--color-surface);\n\t\t}\n\t\t.mark.ok {\n\t\t\tbackground: var(--color-accent);\n\t\t\tanimation: pop 400ms cubic-bezier(.2, 1.4, .4, 1);\n\t\t}\n\t\t.mark.bad {\n\t\t\tbackground: var(--color-danger);\n\t\t}\n\t\t@keyframes pop {\n\t\t\tfrom { transform: scale(0.4); opacity: 0; }\n\t\t}\n\t\t@media (prefers-reduced-motion: reduce) {\n\t\t\t.mark.ok { animation: none; }\n\t\t}\n\t</style>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

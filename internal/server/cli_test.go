@@ -103,7 +103,7 @@ func TestCLILoginFlow(t *testing.T) {
 	}
 
 	code, body = get(t, browser, app.URL+"/cli/done")
-	if code != 200 || !strings.Contains(body, "You're signed in, Alice") {
+	if code != 200 || !strings.Contains(body, "You're signed in!") {
 		t.Fatalf("done page (%d): %s", code, body)
 	}
 }
@@ -158,7 +158,7 @@ func TestCLIDoneOnlyKnownErrors(t *testing.T) {
 	h := New(Config{}, nil, nil, nil)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest("GET", "/cli/done?error=%3Cscript%3Eyour+account+is+hacked", nil))
-	if strings.Contains(rec.Body.String(), "hacked") || !strings.Contains(rec.Body.String(), "finish signing in") {
+	if strings.Contains(rec.Body.String(), "hacked") || !strings.Contains(rec.Body.String(), "Something went wrong") {
 		t.Fatalf("got %s", rec.Body.String())
 	}
 }
