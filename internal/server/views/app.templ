@@ -1,149 +1,80 @@
 package views
 
-import (
-	"time"
-
-	"github.com/espcaa/sablier/internal/credit"
-	"strings"
-)
+import "time"
 
 type Me struct {
-	Name     string
-	SlackID  string // can be empty cause an hcauth account doesn't always have a slack id
-	APIKey   string
-	Today    time.Duration
-	Projects []ProjectTime
+	Name    string
+	SlackID string // can be empty cause an hcauth account doesn't always have a slack id
+	APIKey  string
+	Today   Summary
+	AllTime Summary
 }
 
-type ProjectTime struct {
+type Summary struct {
+	Total     time.Duration
+	Projects  []Entry // most time first, same for the others
+	Harnesses []Entry
+	Models    []Entry
+}
+
+type Entry struct {
 	Name string
 	Time time.Duration
 }
 
-templ layout(title string) {
-	<!DOCTYPE html>
-	<html lang="en">
-		<head>
-			<meta charset="utf-8"/>
-			<meta name="viewport" content="width=device-width, initial-scale=1"/>
-			<title>{ title }</title>
-			<link rel="stylesheet" href="/tokens.css"/>
-			@styles()
-		</head>
-		<body>
-			<main>
-				{ children... }
-			</main>
-		</body>
-	</html>
-}
-
 templ App(me Me) {
 	@layout("sablier") {
-		<header class="top">
-			<a class="small-name" href="/">sablier</a>
-			<form method="post" action="/auth/logout">
-				<button class="button quiet" type="submit">Sign out</button>
-			</form>
-		</header>
-		<p class="muted">Signed in as { strings.Split(me.Name, " ")[0] }</p>
-		<p class="today">
-			<span class="total">{ credit.Format(me.Today) }</span>
-			<span class="muted">today</span>
-		</p>
-		if len(me.Projects) == 0 {
-			<p class="muted">Nothing tracked today yet. Start your agent through sablier and it shows up here.</p>
-		} else {
-			<ul class="projects">
-				for _, p := range me.Projects {
-					<li>
-						<span>{ p.Name }</span>
-						<span class="time">{ credit.Format(p.Time) }</span>
-					</li>
-				}
-			</ul>
-		}
-		<section class="key">
-			<h2>API key</h2>
-			<div class="copy">
-				<code>{ me.APIKey }</code>
-				<button class="button" type="button" data-copy={ me.APIKey }>Copy</button>
-			</div>
-		</section>
-		<script>
-			for (const b of document.querySelectorAll("[data-copy]")) {
-				b.addEventListener("click", async () => {
-					try {
-						await navigator.clipboard.writeText(b.dataset.copy)
-						b.textContent = "Copied"
-					} catch {
-						b.textContent = "Couldn't copy"
-					}
-					setTimeout(() => (b.textContent = "Copy"), 1500)
-				})
+		@top(me)
+		<p class="sentence">
+			if me.Today.Total == 0 {
+				Nothing tracked today yet. Start your agent through sablier and it shows up here.
+			} else {
+				@templ.Raw(sentence(me.Today))
 			}
-		</script>
+		</p>
+		<div class="cards">
+			if len(me.AllTime.Projects) > 0 {
+				@card("Projects") {
+					@bars(me.AllTime.Projects)
+				}
+			}
+		</div>
+		@appStyles()
 	}
 }
 
-templ styles() {
+templ Settings(me Me) {
+	@layout("settings · sablier") {
+		@top(me)
+		<h1 class="page-title">Settings</h1>
+		<section class="key">
+			<h2>API key</h2>
+			@copyField(me.APIKey)
+		</section>
+		@appStyles()
+	}
+}
+
+templ top(me Me) {
+	<header class="top">
+		<a class="small-name" href="/app">sablier</a>
+		<div class="account">
+			@avatar(me.Name, me.SlackID)
+			@linkButton(iconOnly, "/app/settings", templ.Attributes{"aria-label": "Settings", "title": "Settings"}) {
+				@icon("settings")
+			}
+			<form method="post" action="/auth/logout">
+				@button(iconOnly, "submit", templ.Attributes{"aria-label": "Sign out", "title": "Sign out"}) {
+					@icon("log-out")
+				}
+			</form>
+		</div>
+	</header>
+}
+
+templ appStyles() {
 	<style>
-		body {
-			margin: 0;
-			min-height: 100dvh;
-			display: grid;
-			place-items: center;
-			background: var(--color-canvas);
-			color: var(--color-ink);
-			font-family: var(--font-text);
-			line-height: 1.5;
-		}
-		main {
-			width: min(32rem, 100% - 3rem);
-			padding: 3rem 0;
-			display: flex;
-			flex-direction: column;
-			align-items: center;
-			gap: 0.25rem;
-		}
-		h1, h2, p {
-			margin: 0;
-		}
-		code {
-			font-family: var(--font-mono);
-		}
-		.muted {
-			color: var(--color-muted);
-		}
-		.button {
-			font: inherit;
-			font-weight: 500;
-			background: var(--color-accent);
-			color: var(--color-surface);
-			border: 0;
-			border-radius: var(--radius);
-			padding: 0.6rem 1.4rem;
-			text-decoration: none;
-			cursor: pointer;
-		}
-		.button:hover {
-			background: color-mix(in oklch, var(--color-accent), var(--color-ink) 15%);
-		}
-		.button.quiet {
-			background: var(--color-surface);
-			color: var(--color-ink);
-			border: 1px solid var(--color-border);
-			padding: 0.4rem 1rem;
-		}
-		.button.quiet:hover {
-			background: var(--color-surface-hover);
-		}
-		.button:focus-visible, a:focus-visible {
-			outline: 2px solid var(--color-accent);
-			outline-offset: 3px;
-		}
 		.top {
-			width: 100%;
 			display: flex;
 			justify-content: space-between;
 			align-items: center;
@@ -157,42 +88,38 @@ templ styles() {
 			color: var(--color-ink);
 			text-decoration: none;
 		}
-		.today {
+		.account {
 			display: flex;
-			align-items: baseline;
-			gap: 0.5rem;
-			margin: 0.5rem 0 1.5rem;
+			align-items: center;
+			gap: 0.75rem;
 		}
-		.total {
+		.sentence {
+			max-width: 48rem;
+			font-size: 1.6rem;
+			line-height: 1.35;
+			letter-spacing: -0.01em;
+			margin: 0.5rem 0 0;
+			text-wrap: pretty;
+		}
+		.sentence strong {
 			font-weight: 600;
+			white-space: nowrap;
+		}
+		.sentence .total {
 			font-style: italic;
-			font-size: 4.5rem;
-			letter-spacing: -0.04em;
-			line-height: 1;
 			color: var(--color-accent);
 			font-variant-numeric: tabular-nums;
 		}
-		.projects {
-			list-style: none;
-			padding: 0;
-			margin: 0;
-			width: 100%;
-			border-top: 1px solid var(--color-border);
-		}
-		.projects li {
+		.cards {
+			margin-top: 2.5rem;
 			display: flex;
-			justify-content: space-between;
-			gap: 1rem;
-			padding: 0.6rem 0;
-			border-bottom: 1px solid var(--color-border);
-		}
-		.projects .time {
-			font-variant-numeric: tabular-nums;
-			color: var(--color-muted);
+			flex-wrap: wrap;
+			align-items: start;
+			gap: 1.5rem;
 		}
 		.key {
-			width: 100%;
-			margin-top: 2.5rem;
+			max-width: 40rem;
+			margin-top: 1.5rem;
 			display: flex;
 			flex-direction: column;
 			gap: 0.5rem;
@@ -201,22 +128,15 @@ templ styles() {
 			font-size: 1rem;
 			font-weight: 600;
 		}
-		.copy {
-			display: flex;
-			border: 1px solid var(--color-border);
-			border-radius: var(--radius);
-			background: var(--color-surface);
-			overflow: hidden;
+		.page-title {
+			font-size: 1.6rem;
+			font-weight: 600;
+			letter-spacing: -0.01em;
 		}
-		.copy code {
-			flex: 1;
-			padding: 0.6rem 0.8rem;
-			font-size: 0.85rem;
-			overflow-x: auto;
-			white-space: nowrap;
-		}
-		.copy .button {
-			border-radius: 0;
+		.cards > .card {
+			flex: 1 1 22rem;
+			min-width: 0;
+			max-width: 36rem;
 		}
 	</style>
 }

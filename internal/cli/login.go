@@ -61,7 +61,7 @@ func newLoginCmd() *cobra.Command {
 // hidden when typed in a terminal
 func readKey(in io.Reader, prompt io.Writer, apiURL string) (string, error) {
 	if f, ok := in.(*os.File); ok && term.IsTerminal(int(f.Fd())) {
-		fmt.Fprintf(prompt, "api key (from %s): ", apiURL)
+		fmt.Fprintf(prompt, "api key (from %s/app/settings): ", apiURL)
 		b, err := term.ReadPassword(int(f.Fd()))
 		fmt.Fprintln(prompt)
 		return strings.TrimSpace(string(b)), err

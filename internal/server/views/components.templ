@@ -1,0 +1,187 @@
+package views
+
+type buttonKind string
+
+const (
+	primary buttonKind = "button"
+	quiet    buttonKind = "button quiet"
+	iconOnly buttonKind = "button quiet icon"
+)
+
+// type is button or submit
+templ button(kind buttonKind, typ string, attrs templ.Attributes) {
+	<button class={ string(kind) } type={ typ } { attrs... }>
+		{ children... }
+	</button>
+}
+
+// a link that looks like a button
+templ linkButton(kind buttonKind, href templ.SafeURL, attrs templ.Attributes) {
+	<a class={ string(kind) } href={ href } { attrs... }>
+		{ children... }
+	</a>
+}
+
+templ card(title string) {
+	<section class="card">
+		if title != "" {
+			<h2>{ title }</h2>
+		}
+		{ children... }
+	</section>
+}
+
+// slack picture, or the first letter when there's no slack id
+templ avatar(name, slackID string) {
+	if slackID != "" {
+		<img class="avatar" src={ pfpURL(slackID) } alt="" title={ name }/>
+	} else {
+		<span class="avatar" title={ name }>{ initial(name) }</span>
+	}
+}
+
+// horizontal bars, the first entry is the longest
+templ bars(list []Entry) {
+	<div class="bars">
+		for _, e := range list {
+			<span class="name" title={ e.Name }>{ e.Name }</span>
+			<span class="bar" style={ barWidth(e.Time, list[0].Time) }>{ long(e.Time) }</span>
+		}
+	</div>
+}
+
+templ copyField(value string) {
+	<div class="copy">
+		<code>{ value }</code>
+		@button(primary, "button", templ.Attributes{"data-copy": value}) {
+			Copy
+		}
+	</div>
+	<script>
+		for (const b of document.querySelectorAll("[data-copy]:not([data-ready])")) {
+			b.dataset.ready = ""
+			b.addEventListener("click", async () => {
+				try {
+					await navigator.clipboard.writeText(b.dataset.copy)
+					b.textContent = "Copied"
+				} catch {
+					b.textContent = "Couldn't copy"
+				}
+				setTimeout(() => (b.textContent = "Copy"), 1500)
+			})
+		}
+	</script>
+}
+
+templ componentStyles() {
+	<style>
+		.button {
+			font: inherit;
+			font-weight: 500;
+			background: var(--color-accent);
+			color: var(--color-surface);
+			border: 0;
+			border-radius: var(--radius);
+			padding: 0.6rem 1.4rem;
+			text-decoration: none;
+			cursor: pointer;
+		}
+		.button:hover {
+			background: color-mix(in oklch, var(--color-accent), var(--color-ink) 15%);
+		}
+		.button.quiet {
+			display: inline-block;
+			background: var(--color-surface);
+			color: var(--color-ink);
+			border: 1px solid var(--color-border);
+			padding: 0.4rem 1rem;
+		}
+		.button.icon {
+			display: inline-grid;
+			place-items: center;
+			width: 2.25rem;
+			height: 2.25rem;
+			padding: 0;
+		}
+		.button.icon svg {
+			width: 1.1rem;
+			height: 1.1rem;
+		}
+		.button.quiet:hover {
+			background: var(--color-surface-hover);
+		}
+		.button:focus-visible {
+			outline: 2px solid var(--color-accent);
+			outline-offset: 3px;
+		}
+		.card {
+			box-sizing: border-box;
+			display: flex;
+			flex-direction: column;
+			gap: 1rem;
+			padding: 1.5rem;
+			background: var(--color-surface);
+			border: 1px solid var(--color-border);
+			border-radius: calc(var(--radius) * 2);
+		}
+		.card h2 {
+			font-size: 1.1rem;
+			font-weight: 600;
+		}
+		.avatar {
+			width: 2.25rem;
+			height: 2.25rem;
+			border-radius: 50%;
+			object-fit: cover;
+			display: grid;
+			place-items: center;
+			background: var(--color-accent);
+			color: var(--color-surface);
+			font-weight: 600;
+		}
+		.bars {
+			display: grid;
+			grid-template-columns: minmax(0, max-content) 1fr;
+			gap: 0.4rem 1rem;
+			align-items: center;
+		}
+		.bars .name {
+			max-width: min(14rem, 40vw);
+			text-align: right;
+			color: var(--color-muted);
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+		.bar {
+			width: var(--w);
+			min-width: max-content;
+			box-sizing: border-box;
+			padding: 0.3rem 0.7rem;
+			border-radius: var(--radius);
+			background: var(--color-accent);
+			color: var(--color-surface);
+			font-weight: 500;
+			text-align: right;
+			font-variant-numeric: tabular-nums;
+		}
+		.copy {
+			display: flex;
+			border: 1px solid var(--color-border);
+			border-radius: var(--radius);
+			background: var(--color-surface);
+			overflow: hidden;
+		}
+		.copy code {
+			flex: 1;
+			min-width: 0;
+			padding: 0.6rem 0.8rem;
+			font-size: 0.85rem;
+			overflow-x: auto;
+			white-space: nowrap;
+		}
+		.copy .button {
+			border-radius: 0;
+		}
+	</style>
+}

@@ -49,18 +49,35 @@ func TestToday(t *testing.T) {
 	sd.add(t, installA, event.PromptSent, noon.Add(time.Minute), "pa1", event.PromptSentData{})
 	// desktop: the same folder, different id, 5m later in the day
 	sd.add(t, installB, event.PromptSent, noon.Add(time.Hour), "pb1", event.PromptSentData{})
-	// yesterday doesn't count
+	// yesterday doesn't count, but its session's model does
+	sd.add(t, installB, event.SessionStart, noon.Add(-24*time.Hour-time.Minute), "pb1", event.SessionStartData{Model: "claude-opus-5-5"})
 	sd.add(t, installB, event.PromptSent, noon.Add(-24*time.Hour), "pb1", event.PromptSentData{})
 
 	q.UpsertProject(ctx, sqlc.UpsertProjectParams{InstallID: uuidOf(installA), ProjectID: "pa1", Name: "sablier"})
 	q.UpsertProject(ctx, sqlc.UpsertProjectParams{InstallID: uuidOf(installB), ProjectID: "pb1", Name: "sablier"})
 
-	total, projects, err := s.today(ctx, "ident!a", noon.Add(3*time.Hour))
+	now := noon.Add(3 * time.Hour)
+	sum, err := s.summary(ctx, "ident!a", midnight(now), now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if total != 11*time.Minute || len(projects) != 1 || projects[0].Name != "sablier" || projects[0].Time != 11*time.Minute {
-		t.Fatalf("got %s, %+v", total, projects)
+	if sum.Total != 11*time.Minute || len(sum.Projects) != 1 || sum.Projects[0].Name != "sablier" || sum.Projects[0].Time != 11*time.Minute {
+		t.Fatalf("got %+v", sum)
+	}
+	if len(sum.Harnesses) != 1 || sum.Harnesses[0].Name != "claude-code" || sum.Harnesses[0].Time != 11*time.Minute {
+		t.Fatalf("harnesses %+v", sum.Harnesses)
+	}
+	if len(sum.Models) != 1 || sum.Models[0].Name != "claude-opus-5-5" || sum.Models[0].Time != 5*time.Minute {
+		t.Fatalf("models %+v", sum.Models)
+	}
+
+	// all time adds yesterday's 1m+5m, and the desktop prompt now earns 5m before it too
+	all, err := s.summary(ctx, "ident!a", time.Time{}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if all.Total != 22*time.Minute || all.Projects[0].Time != 22*time.Minute {
+		t.Fatalf("all time %+v", all)
 	}
 }
 

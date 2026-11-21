@@ -5,6 +5,7 @@ import (
 	"log"
 	"os/signal"
 	"syscall"
+	_ "time/tzdata"
 
 	"github.com/espcaa/sablier/internal/server"
 	"github.com/joho/godotenv"

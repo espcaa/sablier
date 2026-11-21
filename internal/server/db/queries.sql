@@ -48,3 +48,11 @@ WHERE s.token_hash = $1 AND s.expires_at > now();
 
 -- name: DeleteSession :exec
 DELETE FROM sessions WHERE token_hash = $1;
+
+-- name: SessionModels :many
+SELECT DISTINCT ON (e.session_id) e.session_id, (e.data->>'model')::text AS model
+FROM events e
+JOIN installs i ON i.id = e.install_id
+WHERE i.user_id = $1 AND e.kind = 'session_start' AND e.session_id = ANY(sqlc.arg(sessions)::text[])
+  AND e.data->>'model' <> ''
+ORDER BY e.session_id, e.ts DESC;

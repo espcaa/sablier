@@ -21,6 +21,7 @@ var Default = Rules{AgentCap: 5 * time.Minute, InputCap: 2 * time.Minute}
 type Report struct {
 	Credited  time.Duration
 	ByProject map[string]time.Duration
+	BySession map[string]time.Duration
 	AgentBusy time.Duration
 	Actions   int
 	First     time.Time // wall clock span
@@ -33,6 +34,7 @@ type span struct{ start, end time.Time }
 type window struct {
 	span
 	project string
+	session string
 	anchor  time.Time
 }
 
@@ -44,7 +46,7 @@ type window struct {
 //
 // nothing is counted after until.
 func Compute(events []event.Event, r Rules, until time.Time) Report {
-	rep := Report{ByProject: map[string]time.Duration{}}
+	rep := Report{ByProject: map[string]time.Duration{}, BySession: map[string]time.Duration{}}
 	if len(events) == 0 {
 		return rep
 	}
@@ -78,7 +80,10 @@ func Compute(events []event.Event, r Rules, until time.Time) Report {
 		busy[i] = clip(busy[i], until)
 	}
 
-	rep.Credited = attribute(windows, rep.ByProject)
+	rep.Credited = attribute(windows, func(w window, d time.Duration) {
+		rep.ByProject[w.project] += d
+		rep.BySession[w.session] += d
+	})
 	rep.AgentBusy = union(busy)
 	return rep
 }
@@ -128,7 +133,7 @@ func session(events []event.Event, r Rules, until time.Time) ([]window, []span, 
 				d := p.(*event.InputTickData)
 				if d.Keys > 0 || d.Mouse > 0 || d.Pasted {
 					from := e.TS.Add(-time.Duration(d.WindowMs) * time.Millisecond)
-					out = append(out, window{span{from, e.TS.Add(r.InputCap)}, e.ProjectID, e.TS})
+					out = append(out, window{span{from, e.TS.Add(r.InputCap)}, e.ProjectID, e.SessionID, e.TS})
 				}
 			}
 		case event.Focus:
@@ -144,7 +149,7 @@ func session(events []event.Event, r Rules, until time.Time) ([]window, []span, 
 	n := r.AgentCap
 	for i, a := range actions {
 		h := a.TS
-		out = append(out, window{span{h, h.Add(n)}, a.ProjectID, h})
+		out = append(out, window{span{h, h.Add(n)}, a.ProjectID, a.SessionID, h})
 
 		var from time.Time
 		if l, ok := latency[i]; ok {
@@ -162,7 +167,7 @@ func session(events []event.Event, r Rules, until time.Time) ([]window, []span, 
 			}
 		}
 		from = latest(from, h.Add(-n))
-		out = append(out, window{span{from, h}, a.ProjectID, h})
+		out = append(out, window{span{from, h}, a.ProjectID, a.SessionID, h})
 	}
 	return subtract(out, away(focus, r.InputCap, until)), turns, len(actions)
 }
@@ -249,7 +254,7 @@ func clip(s span, until time.Time) span {
 }
 
 // splits time at every window edge, gives each piece to the window with the latest anchor
-func attribute(ws []window, by map[string]time.Duration) time.Duration {
+func attribute(ws []window, add func(window, time.Duration)) time.Duration {
 	var points []time.Time
 	for _, w := range ws {
 		points = append(points, w.start, w.end)
@@ -269,7 +274,7 @@ func attribute(ws []window, by map[string]time.Duration) time.Duration {
 			}
 		}
 		if best >= 0 {
-			by[ws[best].project] += b.Sub(a)
+			add(ws[best], b.Sub(a))
 			total += b.Sub(a)
 		}
 	}
@@ -281,7 +286,7 @@ func union(spans []span) time.Duration {
 	for i, s := range spans {
 		ws[i] = window{span: s}
 	}
-	return attribute(ws, map[string]time.Duration{})
+	return attribute(ws, func(window, time.Duration) {})
 }
 
 // minutes, like 0m, 27m, 1h05m

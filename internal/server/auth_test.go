@@ -100,13 +100,18 @@ func TestSignInFlow(t *testing.T) {
 
 	// login -> fake hack club -> callback -> /app
 	code, body := get(t, browser, app.URL+"/auth/login")
-	if code != 200 || !strings.Contains(body, "Signed in as Alice B") || !strings.Contains(body, "sab_") {
+	if code != 200 || !strings.Contains(body, "cachet.dunkirk.sh/users/U123/r") {
 		t.Fatalf("after sign in (%d): %s", code, body)
+	}
+	code, body = get(t, browser, app.URL+"/app/settings")
+	if code != 200 || !strings.Contains(body, "sab_") {
+		t.Fatalf("settings (%d): %s", code, body)
 	}
 
 	// signing in again keeps the same key
 	key := body[strings.Index(body, "sab_"):][:44]
-	_, body = get(t, browser, app.URL+"/auth/login")
+	get(t, browser, app.URL+"/auth/login")
+	_, body = get(t, browser, app.URL+"/app/settings")
 	if !strings.Contains(body, key) {
 		t.Fatal("api key changed on second sign in")
 	}

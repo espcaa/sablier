@@ -92,6 +92,45 @@ func (q *Queries) InsertEvent(ctx context.Context, arg InsertEventParams) (int64
 	return result.RowsAffected(), nil
 }
 
+const sessionModels = `-- name: SessionModels :many
+SELECT DISTINCT ON (e.session_id) e.session_id, (e.data->>'model')::text AS model
+FROM events e
+JOIN installs i ON i.id = e.install_id
+WHERE i.user_id = $1 AND e.kind = 'session_start' AND e.session_id = ANY($2::text[])
+  AND e.data->>'model' <> ''
+ORDER BY e.session_id, e.ts DESC
+`
+
+type SessionModelsParams struct {
+	UserID   string
+	Sessions []string
+}
+
+type SessionModelsRow struct {
+	SessionID string
+	Model     string
+}
+
+func (q *Queries) SessionModels(ctx context.Context, arg SessionModelsParams) ([]SessionModelsRow, error) {
+	rows, err := q.db.Query(ctx, sessionModels, arg.UserID, arg.Sessions)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SessionModelsRow
+	for rows.Next() {
+		var i SessionModelsRow
+		if err := rows.Scan(&i.SessionID, &i.Model); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setAPIKey = `-- name: SetAPIKey :exec
 UPDATE users SET api_key = $2 WHERE id = $1
 `

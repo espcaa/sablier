@@ -40,6 +40,7 @@ func New(cfg Config, db database, q *sqlc.Queries, auth *hcauth.Client) http.Han
 		r.Use(middleware.Logger)
 		r.Get("/health", s.health)
 		r.Get("/app", s.app)
+		r.Get("/app/settings", s.settings)
 		r.Get("/auth/login", s.login)
 		r.Get("/auth/callback", s.callback)
 		r.Post("/auth/logout", s.logout)
@@ -70,13 +71,29 @@ func (s *Server) app(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/auth/login", http.StatusFound)
 		return
 	}
-	total, projects, err := s.today(r.Context(), u.ID, time.Now())
+	now := time.Now().In(viewerLocation(r))
+	today, err := s.summary(r.Context(), u.ID, midnight(now), now)
 	if err != nil {
 		log.Print(err)
 		http.Error(w, "couldn't load today", http.StatusInternalServerError)
 		return
 	}
-	views.App(views.Me{Name: u.Name, SlackID: u.SlackID.String, APIKey: u.ApiKey, Today: total, Projects: projects}).Render(r.Context(), w)
+	all, err := s.summary(r.Context(), u.ID, time.Time{}, now)
+	if err != nil {
+		log.Print(err)
+		http.Error(w, "couldn't load your projects", http.StatusInternalServerError)
+		return
+	}
+	views.App(views.Me{Name: u.Name, SlackID: u.SlackID.String, APIKey: u.ApiKey, Today: today, AllTime: all}).Render(r.Context(), w)
+}
+
+func (s *Server) settings(w http.ResponseWriter, r *http.Request) {
+	u := s.currentUser(r)
+	if u == nil {
+		http.Redirect(w, r, "/auth/login", http.StatusFound)
+		return
+	}
+	views.Settings(views.Me{Name: u.Name, SlackID: u.SlackID.String, APIKey: u.ApiKey}).Render(r.Context(), w)
 }
 
 // serves until ctx is done, then shuts down gracefully
