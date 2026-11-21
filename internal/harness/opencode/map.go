@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/espcaa/sablier/internal/event"
-	"github.com/espcaa/sablier/internal/prompt"
+	"github.com/espcaa/sablier/internal/harness"
 )
 
 const Harness = "opencode"
@@ -115,11 +115,7 @@ func (m *Mapper) Map(e Event) []event.Event {
 		if d.Item.Type != "user" {
 			break
 		}
-		emit(s, event.PromptSent, at, event.PromptSentData{
-			Hash:         prompt.Hash(prompt.Key(m.Salt, m.Session, at), d.Item.Payload.Text),
-			ApprovalLike: prompt.ApprovalLike(d.Item.Payload.Text),
-			Queued:       s.turn != "",
-		})
+		out = append(out, m.emitter(s).Prompt(at, d.Item.Payload.Text, s.turn != ""))
 		s.prompt = d.InboxID
 
 	case "session.execution.started":
@@ -205,16 +201,12 @@ func (m *Mapper) session(id string, e Event, out *[]event.Event) *session {
 	return s
 }
 
+func (m *Mapper) emitter(s *session) harness.Emitter {
+	return harness.Emitter{Harness: Harness, Session: m.Session, Project: s.project, Salt: m.Salt}
+}
+
 func (m *Mapper) event(s *session, kind event.Kind, ts time.Time, data any) event.Event {
-	e, err := event.New(kind, ts, data)
-	if err != nil {
-		panic(err) // unknown kind, a bug here
-	}
-	e.SessionID = m.Session
-	e.ProjectID = s.project
-	e.Harness = Harness
-	e.Source = event.SourceAdapter
-	return e
+	return m.emitter(s).Event(kind, ts, data)
 }
 
 func category(tool string) event.ToolCategory {

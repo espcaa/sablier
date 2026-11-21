@@ -10,6 +10,12 @@ SELECT CAST(COALESCE((SELECT hash FROM events WHERE seq < ? ORDER BY seq DESC LI
 -- name: SetHash :exec
 UPDATE events SET prev_hash = ?, hash = ? WHERE seq = ?;
 
+-- name: InsertPrompt :exec
+INSERT INTO prompts (seq, text) VALUES (?, ?);
+
+-- name: GetPrompt :one
+SELECT text FROM prompts WHERE seq = ?;
+
 -- name: EventsBetween :many
 SELECT * FROM events
 WHERE ts >= sqlc.arg(from_ts) AND ts < sqlc.arg(to_ts)

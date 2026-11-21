@@ -137,7 +137,10 @@ func (t *Tx) Append(ctx context.Context, e event.Event) (event.Event, error) {
 		Hash:     sql.NullString{String: e.Hash, Valid: true},
 		Seq:      seq,
 	})
-	return e, err
+	if err != nil || e.Prompt == "" {
+		return e, err
+	}
+	return e, t.q.InsertPrompt(ctx, sqlc.InsertPromptParams{Seq: seq, Text: e.Prompt})
 }
 
 func (t *Tx) SessionState(ctx context.Context, sessionID string) ([]byte, error) {
@@ -207,6 +210,15 @@ func (s *Store) NewInstall(ctx context.Context, old string) error {
 		}
 		return nil
 	})
+}
+
+// what the prompt_sent at seq said, "" if it wasn't kept
+func (s *Store) Prompt(ctx context.Context, seq int64) (string, error) {
+	text, err := s.q.GetPrompt(ctx, seq)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return text, err
 }
 
 // value for key, "" if never set

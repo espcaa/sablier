@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/espcaa/sablier/internal/event"
-	"github.com/espcaa/sablier/internal/prompt"
+	"github.com/espcaa/sablier/internal/harness"
 )
 
 type State struct {
@@ -54,10 +54,7 @@ func Map(st State, in Input) (State, []event.Event) {
 		// no interrupt or deny hook exists, a new prompt means the open turn and dialogs were cut
 		st = m.denyPending(st, isMain)
 		st = m.closeTurn(st, "interrupted")
-		m.emit(event.PromptSent, in.Now, event.PromptSentData{
-			Hash:         prompt.Hash(prompt.Key(in.Salt, m.session(), in.Now), h.Prompt),
-			ApprovalLike: prompt.ApprovalLike(h.Prompt),
-		})
+		m.out = append(m.out, m.emitter().Prompt(in.Now, h.Prompt, false))
 		m.emit(event.AgentTurnStart, in.Now, event.AgentTurnStartData{TurnID: h.PromptID})
 		st.OpenTurn = h.PromptID
 
@@ -150,16 +147,12 @@ func (m *mapper) session() string {
 	return m.in.Hook.SessionID
 }
 
+func (m *mapper) emitter() harness.Emitter {
+	return harness.Emitter{Harness: Harness, Session: m.session(), Project: m.in.ProjectID, Salt: m.in.Salt}
+}
+
 func (m *mapper) emit(kind event.Kind, ts time.Time, data any) {
-	e, err := event.New(kind, ts, data)
-	if err != nil {
-		panic(err) // unknown kind, a bug here
-	}
-	e.SessionID = m.session()
-	e.ProjectID = m.in.ProjectID
-	e.Harness = Harness
-	e.Source = event.SourceAdapter
-	m.out = append(m.out, e)
+	m.out = append(m.out, m.emitter().Event(kind, ts, data))
 }
 
 func category(tool string) event.ToolCategory {

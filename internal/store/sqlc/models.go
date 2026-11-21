@@ -27,6 +27,11 @@ type Meta struct {
 	Value string
 }
 
+type Prompt struct {
+	Seq  int64
+	Text string
+}
+
 type SessionState struct {
 	SessionID string
 	Data      string

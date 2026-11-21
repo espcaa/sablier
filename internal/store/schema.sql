@@ -15,6 +15,12 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE INDEX IF NOT EXISTS events_ts ON events (ts);
 CREATE INDEX IF NOT EXISTS events_pending ON events (seq) WHERE uploaded_at IS NULL;
 
+-- what each prompt_sent said, never synced unless you verify it
+CREATE TABLE IF NOT EXISTS prompts (
+    seq  INTEGER PRIMARY KEY REFERENCES events (seq),
+    text TEXT    NOT NULL
+);
+
 -- key/value, e.g. install salt
 CREATE TABLE IF NOT EXISTS meta (
     key   TEXT PRIMARY KEY,

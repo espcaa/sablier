@@ -3,7 +3,9 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -209,5 +211,24 @@ func TestChainAfterOldDatabase(t *testing.T) {
 		if e.Hash != want || (i > 0 && e.PrevHash != es[i].Hash) {
 			t.Fatalf("event %d doesn't chain: %+v", e.Seq, e)
 		}
+	}
+}
+
+// kept for verify, but never part of what sync sends
+func TestPromptStaysLocal(t *testing.T) {
+	s, ctx := open(t), context.Background()
+	e := mk(t, time.Now())
+	e.Prompt = "fix the failing test"
+	e, err := s.Append(ctx, e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.Prompt(ctx, e.Seq); got != "fix the failing test" {
+		t.Fatalf("got %q", got)
+	}
+	pending, _ := s.Pending(ctx, 10)
+	b, _ := json.Marshal(pending)
+	if strings.Contains(string(b), "failing") {
+		t.Fatalf("prompt text in the upload: %s", b)
 	}
 }

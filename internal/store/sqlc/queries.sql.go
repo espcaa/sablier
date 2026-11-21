@@ -83,6 +83,17 @@ func (q *Queries) GetMeta(ctx context.Context, key string) (string, error) {
 	return value, err
 }
 
+const getPrompt = `-- name: GetPrompt :one
+SELECT text FROM prompts WHERE seq = ?
+`
+
+func (q *Queries) GetPrompt(ctx context.Context, seq int64) (string, error) {
+	row := q.db.QueryRowContext(ctx, getPrompt, seq)
+	var text string
+	err := row.Scan(&text)
+	return text, err
+}
+
 const getSessionState = `-- name: GetSessionState :one
 SELECT data FROM session_state WHERE session_id = ?
 `
@@ -123,6 +134,20 @@ func (q *Queries) InsertEvent(ctx context.Context, arg InsertEventParams) (int64
 	var seq int64
 	err := row.Scan(&seq)
 	return seq, err
+}
+
+const insertPrompt = `-- name: InsertPrompt :exec
+INSERT INTO prompts (seq, text) VALUES (?, ?)
+`
+
+type InsertPromptParams struct {
+	Seq  int64
+	Text string
+}
+
+func (q *Queries) InsertPrompt(ctx context.Context, arg InsertPromptParams) error {
+	_, err := q.db.ExecContext(ctx, insertPrompt, arg.Seq, arg.Text)
+	return err
 }
 
 const lastEventFrom = `-- name: LastEventFrom :one

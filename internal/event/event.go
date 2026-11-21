@@ -40,6 +40,7 @@ type Event struct {
 	Data      json.RawMessage `json:"data,omitempty"`
 	PrevHash  string          `json:"prev_hash,omitempty"` // empty on events from before the chain
 	Hash      string          `json:"hash,omitempty"`
+	Prompt    string          `json:"-"` // prompt only written to local db (unless you verify it)
 }
 
 // payloads, one per kind

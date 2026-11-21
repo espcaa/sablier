@@ -237,4 +237,7 @@ func TestPromptHashFromStoredEvent(t *testing.T) {
 	if want := prompt.Hash(prompt.Key([]byte("test-salt"), e.SessionID, stored), "fix the test"); p.(*event.PromptSentData).Hash != want {
 		t.Fatal("prompt hash can't be rebuilt from the stored event")
 	}
+	if e.Prompt != "Fix the test" {
+		t.Fatal("prompt text not kept for the local db")
+	}
 }
