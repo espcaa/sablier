@@ -42,7 +42,6 @@ func postToken(t *testing.T, base, code, verifier string) (int, map[string]strin
 	return resp.StatusCode, out
 }
 
-// sign in from scratch through the consent page, then trade the code like the cli does
 func TestCLILoginFlow(t *testing.T) {
 	pool := testPool(t)
 	hc := fakeHackClub(t)
@@ -58,13 +57,11 @@ func TestCLILoginFlow(t *testing.T) {
 	const verifier = "a-long-random-verifier-from-the-cli-0123456789"
 	q := cliQuery("45678", "state-from-the-cli-123", verifier)
 
-	// signed out: hack club sign in, then back on the consent page
 	code, body := get(t, browser, app.URL+"/cli/authorize?"+q.Encode())
-	if code != 200 || !strings.Contains(body, "Sign in to the sablier CLI?") || !strings.Contains(body, "Alice") {
+	if code != 200 || !strings.Contains(body, "Link the CLI to your account?") || !strings.Contains(body, "Alice") {
 		t.Fatalf("consent page (%d): %s", code, body)
 	}
 
-	// allow -> 127.0.0.1:port/callback with a code and the same state
 	noFollow := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	form := url.Values{"decision": {"allow"}}
 	for k, v := range q {
@@ -81,7 +78,6 @@ func TestCLILoginFlow(t *testing.T) {
 	}
 	cliCode := loc.Query().Get("code")
 
-	// the wrong verifier fails, and burns the code
 	if st, _ := postToken(t, app.URL, cliCode, "not-the-verifier"); st != 400 {
 		t.Fatalf("wrong verifier: %d", st)
 	}
@@ -89,7 +85,6 @@ func TestCLILoginFlow(t *testing.T) {
 		t.Fatalf("burnt code still works: %d", st)
 	}
 
-	// again, this time right
 	resp, _ = noFollow.PostForm(app.URL+"/cli/authorize", form)
 	resp.Body.Close()
 	loc, _ = url.Parse(resp.Header.Get("Location"))

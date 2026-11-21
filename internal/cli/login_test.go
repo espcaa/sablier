@@ -70,7 +70,6 @@ func TestLoginEmptyKey(t *testing.T) {
 	}
 }
 
-// a fake server that approves right away, and a fake browser that follows the redirects
 func TestBrowserLogin(t *testing.T) {
 	var challenge string
 	var srv *httptest.Server

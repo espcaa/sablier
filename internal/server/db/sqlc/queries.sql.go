@@ -42,7 +42,6 @@ type ConsumeCLICodeRow struct {
 	ExpiresAt pgtype.Timestamptz
 }
 
-// single use: the code is gone after the first try, even a wrong one
 func (q *Queries) ConsumeCLICode(ctx context.Context, codeHash []byte) (ConsumeCLICodeRow, error) {
 	row := q.db.QueryRow(ctx, consumeCLICode, codeHash)
 	var i ConsumeCLICodeRow

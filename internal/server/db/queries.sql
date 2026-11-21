@@ -52,7 +52,6 @@ DELETE FROM sessions WHERE token_hash = $1;
 -- name: CreateCLICode :exec
 INSERT INTO cli_codes (code_hash, user_id, challenge, expires_at) VALUES ($1, $2, $3, $4);
 
--- single use: the code is gone after the first try, even a wrong one
 -- name: ConsumeCLICode :one
 DELETE FROM cli_codes WHERE code_hash = $1
 RETURNING user_id, challenge, expires_at;

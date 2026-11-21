@@ -59,7 +59,7 @@ func CLIConsent(c Consent) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<a class=\"small-name\" href=\"/\">sablier</a><section class=\"card\"><h1>Sign in to the sablier CLI?</h1><p class=\"muted\">You're ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<a class=\"small-name\" href=\"/\">sablier</a><section class=\"card\"><h1>Link the CLI to your account?</h1><p class=\"muted\">You're ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

@@ -22,7 +22,7 @@ templ CLIConsent(c Consent) {
 		@cliStyles()
 		<a class="small-name" href="/">sablier</a>
 		<section class="card">
-			<h1>Sign in to the sablier CLI?</h1>
+			<h1>Link the CLI to your account?</h1>
 			<p class="muted">You're { firstName(c.Name) }. Only allow this if you just ran <code>sablier login</code>.</p>
 			<form method="post" action="/cli/authorize" class="actions">
 				<input type="hidden" name="port" value={ c.Port }/>

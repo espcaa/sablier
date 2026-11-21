@@ -27,7 +27,6 @@ import (
 
 const loginTimeout = 5 * time.Minute
 
-// swapped in tests
 var openBrowser = defaultOpenBrowser
 
 func newLoginCmd() *cobra.Command {
@@ -98,8 +97,6 @@ type loginResult struct {
 	err       error
 }
 
-// oauth for native apps (rfc 8252): a one-shot server on 127.0.0.1 gets the code,
-// pkce makes sure only this process can trade it for the key
 func browserLogin(cmd *cobra.Command, apiURL string, open bool) (string, string, error) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -127,7 +124,7 @@ func browserLogin(cmd *cobra.Command, apiURL string, open bool) (string, string,
 	send := func(r loginResult) {
 		select {
 		case results <- r:
-		default: // already have an answer
+		default:
 		}
 	}
 	done := func(w http.ResponseWriter, r *http.Request, errCode string) {
@@ -161,7 +158,6 @@ func browserLogin(cmd *cobra.Command, apiURL string, open bool) (string, string,
 	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 	go srv.Serve(ln)
 	defer func() {
-		// let the last redirect reach the browser
 		sctx, c := context.WithTimeout(context.Background(), 2*time.Second)
 		defer c()
 		srv.Shutdown(sctx)

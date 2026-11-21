@@ -19,7 +19,7 @@ import (
 const (
 	sessionCookie = "sablier_session"
 	stateCookie   = "sablier_oauth_state"
-	nextCookie    = "sablier_next" // where to land after sign in, e.g. the cli consent page
+	nextCookie    = "sablier_next"
 	sessionTTL    = 30 * 24 * time.Hour
 )
 
@@ -109,7 +109,6 @@ func (s *Server) callback(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, next, http.StatusFound)
 }
 
-// only paths on this site, so ?next= can't send people elsewhere
 func localPath(p string) string {
 	if !strings.HasPrefix(p, "/") || strings.HasPrefix(p, "//") || strings.HasPrefix(p, "/\\") {
 		return "/app"

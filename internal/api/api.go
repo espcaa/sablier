@@ -42,7 +42,6 @@ type CLIToken struct {
 	User
 }
 
-// trades a browser login code for the api key, no key needed
 func (c *Client) CLIToken(ctx context.Context, code, verifier string) (CLIToken, error) {
 	body, err := json.Marshal(map[string]string{"code": code, "code_verifier": verifier})
 	if err != nil {
