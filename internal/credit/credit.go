@@ -9,7 +9,7 @@ import (
 	"github.com/espcaa/sablier/internal/event"
 )
 
-const Version = 2
+const Version = 3
 
 type Rules struct {
 	AgentCap time.Duration
@@ -33,16 +33,17 @@ type span struct{ start, end time.Time }
 // a credited window, anchor is action that started it
 type window struct {
 	span
-	project string
-	session string
-	anchor  time.Time
+	project  string
+	session  string
+	anchor   time.Time
+	observed bool
 }
 
 // rules, per session:
 //  1. prompts and approvals earn up to AgentCap after them, and before them once the agent was done
 //  2. typing or scrolling earns its tick window plus up to InputCap after it
 //  3. leaving the terminal for longer than InputCap cuts credit from the moment you left
-//  4. overlapping time counts once, for the project of the most recent action
+//  4. overlapping time counts once, preferring observed input, then the most recent action
 //
 // nothing is counted after until.
 func Compute(events []event.Event, r Rules, until time.Time) Report {
@@ -133,7 +134,10 @@ func session(events []event.Event, r Rules, until time.Time) ([]window, []span, 
 				d := p.(*event.InputTickData)
 				if d.Keys > 0 || d.Mouse > 0 || d.Pasted {
 					from := e.TS.Add(-time.Duration(d.WindowMs) * time.Millisecond)
-					out = append(out, window{span{from, e.TS.Add(r.InputCap)}, e.ProjectID, e.SessionID, e.TS})
+					out = append(out,
+						window{span: span{from, e.TS}, project: e.ProjectID, session: e.SessionID, anchor: e.TS, observed: true},
+						window{span: span{e.TS, e.TS.Add(r.InputCap)}, project: e.ProjectID, session: e.SessionID, anchor: e.TS},
+					)
 				}
 			}
 		case event.Focus:
@@ -149,7 +153,7 @@ func session(events []event.Event, r Rules, until time.Time) ([]window, []span, 
 	n := r.AgentCap
 	for i, a := range actions {
 		h := a.TS
-		out = append(out, window{span{h, h.Add(n)}, a.ProjectID, a.SessionID, h})
+		out = append(out, window{span: span{h, h.Add(n)}, project: a.ProjectID, session: a.SessionID, anchor: h})
 
 		var from time.Time
 		if l, ok := latency[i]; ok {
@@ -167,7 +171,7 @@ func session(events []event.Event, r Rules, until time.Time) ([]window, []span, 
 			}
 		}
 		from = latest(from, h.Add(-n))
-		out = append(out, window{span{from, h}, a.ProjectID, a.SessionID, h})
+		out = append(out, window{span: span{from, h}, project: a.ProjectID, session: a.SessionID, anchor: h})
 	}
 	return subtract(out, away(focus, r.InputCap, until)), turns, len(actions)
 }
@@ -253,7 +257,7 @@ func clip(s span, until time.Time) span {
 	return s
 }
 
-// splits time at every window edge, gives each piece to the window with the latest anchor
+// splits time at window edges and attributes each piece once
 func attribute(ws []window, add func(window, time.Duration)) time.Duration {
 	var points []time.Time
 	for _, w := range ws {
@@ -269,7 +273,10 @@ func attribute(ws []window, add func(window, time.Duration)) time.Duration {
 		}
 		best := -1
 		for j, w := range ws {
-			if !w.start.After(a) && !w.end.Before(b) && (best < 0 || w.anchor.After(ws[best].anchor)) {
+			if w.start.After(a) || w.end.Before(b) {
+				continue
+			}
+			if best < 0 || w.precedes(ws[best]) {
 				best = j
 			}
 		}
@@ -279,6 +286,13 @@ func attribute(ws []window, add func(window, time.Duration)) time.Duration {
 		}
 	}
 	return total
+}
+
+func (w window) precedes(other window) bool {
+	if w.observed != other.observed {
+		return w.observed
+	}
+	return w.anchor.After(other.anchor)
 }
 
 func union(spans []span) time.Duration {

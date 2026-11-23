@@ -97,6 +97,16 @@ func TestParallelSessions(t *testing.T) {
 	check(t, rep.ByProject["pb"], 5*time.Minute)
 }
 
+func TestObservedInputWinsOverLaterPrompt(t *testing.T) {
+	a := (&sess{id: "a", project: "pa"}).tick(60, 10, 5, 0)
+	b := (&sess{id: "b", project: "pb"}).start(0).prompt(mins(4))
+	rep := Compute(append(a.events, b.events...), Default, at(mins(4)))
+
+	check(t, rep.Credited, 4*time.Minute)
+	check(t, rep.ByProject["pa"], 10*time.Second)
+	check(t, rep.ByProject["pb"], 3*time.Minute+50*time.Second)
+}
+
 // a running session isn't credited into the future
 func TestClippedAtUntil(t *testing.T) {
 	s := (&sess{id: "s", project: "p"}).prompt(0)
