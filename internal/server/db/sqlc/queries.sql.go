@@ -11,6 +11,43 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const adminStats = `-- name: AdminStats :one
+SELECT
+    (SELECT count(*) FROM users) AS accounts,
+    (SELECT count(*) FROM users WHERE created_at >= now() - interval '30 days') AS new_accounts_30d,
+    activity.active_7d,
+    activity.active_30d,
+    (SELECT count(DISTINCT (user_id, project_id)) FROM verification_checkpoints
+     WHERE received_at >= now() - interval '30 days') AS verified_projects_30d
+FROM (
+    SELECT count(DISTINCT i.user_id) FILTER (WHERE e.received_at >= now() - interval '7 days') AS active_7d,
+           count(DISTINCT i.user_id) AS active_30d
+    FROM events e JOIN installs i ON i.id = e.install_id
+    WHERE e.received_at >= now() - interval '30 days'
+) activity
+`
+
+type AdminStatsRow struct {
+	Accounts            int64
+	NewAccounts30d      int64
+	Active7d            int64
+	Active30d           int64
+	VerifiedProjects30d int64
+}
+
+func (q *Queries) AdminStats(ctx context.Context) (AdminStatsRow, error) {
+	row := q.db.QueryRow(ctx, adminStats)
+	var i AdminStatsRow
+	err := row.Scan(
+		&i.Accounts,
+		&i.NewAccounts30d,
+		&i.Active7d,
+		&i.Active30d,
+		&i.VerifiedProjects30d,
+	)
+	return i, err
+}
+
 const advanceVerification = `-- name: AdvanceVerification :one
 INSERT INTO verification_checkpoints (user_id, install_id, project_id, last_seq)
 VALUES ($1, $2, $3, $4)

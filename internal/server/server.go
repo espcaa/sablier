@@ -46,6 +46,7 @@ func New(cfg Config, db database, q *sqlc.Queries, auth *hcauth.Client) http.Han
 		r.Use(middleware.Logger)
 		r.Get("/health", s.health)
 		r.Get("/app", s.app)
+		r.Get("/admin", s.admin)
 		r.Get("/app/settings", s.settings)
 		r.Post("/app/settings/revoke", sameOrigin(s.revokeDevice))
 		r.Get("/auth/login", s.login)

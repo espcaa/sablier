@@ -105,3 +105,18 @@ ON CONFLICT (user_id, install_id, project_id) DO UPDATE SET
                        THEN now() ELSE verification_checkpoints.received_at END,
     last_seq = greatest(excluded.last_seq, verification_checkpoints.last_seq)
 RETURNING last_seq, received_at;
+
+-- name: AdminStats :one
+SELECT
+    (SELECT count(*) FROM users) AS accounts,
+    (SELECT count(*) FROM users WHERE created_at >= now() - interval '30 days') AS new_accounts_30d,
+    activity.active_7d,
+    activity.active_30d,
+    (SELECT count(DISTINCT (user_id, project_id)) FROM verification_checkpoints
+     WHERE received_at >= now() - interval '30 days') AS verified_projects_30d
+FROM (
+    SELECT count(DISTINCT i.user_id) FILTER (WHERE e.received_at >= now() - interval '7 days') AS active_7d,
+           count(DISTINCT i.user_id) AS active_30d
+    FROM events e JOIN installs i ON i.id = e.install_id
+    WHERE e.received_at >= now() - interval '30 days'
+) activity;

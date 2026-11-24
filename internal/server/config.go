@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"unicode"
 )
 
 type Config struct {
@@ -15,6 +16,7 @@ type Config struct {
 	SiteDir     string // the built website, served for routes the server doesn't handle
 	SiteProxy   string // in dev, astro's dev server instead of SiteDir
 
+	AdminUserIDs         []string
 	HackClubClientID     string
 	HackClubClientSecret string
 }
@@ -26,6 +28,7 @@ func ConfigFromEnv() (Config, error) {
 		BaseURL:              strings.TrimSuffix(os.Getenv("SABLIER_BASE_URL"), "/"),
 		SiteDir:              os.Getenv("SABLIER_SITE_DIR"),
 		SiteProxy:            os.Getenv("SABLIER_SITE_PROXY"),
+		AdminUserIDs:         strings.FieldsFunc(os.Getenv("SABLIER_ADMIN_USER_IDS"), func(r rune) bool { return r == ',' || unicode.IsSpace(r) }),
 		HackClubClientID:     os.Getenv("HACKCLUB_CLIENT_ID"),
 		HackClubClientSecret: os.Getenv("HACKCLUB_CLIENT_SECRET"),
 	}

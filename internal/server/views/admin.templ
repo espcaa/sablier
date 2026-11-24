@@ -1,0 +1,47 @@
+package views
+
+import (
+	"github.com/espcaa/sablier/internal/server/db/sqlc"
+	"strconv"
+)
+
+templ Admin(me Me, stats sqlc.AdminStatsRow) {
+	@layout("admin · sablier") {
+		@top(me)
+		<h1 class="admin-title">Admin</h1>
+		<div class="admin-stats">
+			@adminStat("Total accounts", stats.Accounts)
+			@adminStat("New accounts · 30 days", stats.NewAccounts30d)
+			@adminStat("Active accounts · 7 days", stats.Active7d)
+			@adminStat("Active accounts · 30 days", stats.Active30d)
+			@adminStat("Projects with prompt receipts · 30 days", stats.VerifiedProjects30d)
+		</div>
+		<style>
+			.admin-title {
+				font-size: 1.6rem;
+				font-weight: 600;
+				letter-spacing: -.01em;
+			}
+			.admin-stats {
+				display: grid;
+				grid-template-columns: repeat(auto-fit, minmax(min(12rem, 100%), 1fr));
+				gap: .75rem;
+				max-width: 60rem;
+				margin-block: 1rem;
+			}
+			.admin-stats strong {
+				font-size: 2rem;
+				font-weight: 600;
+				font-variant-numeric: tabular-nums;
+				line-height: 1;
+			}
+			.admin-note { color: var(--color-muted); font-size: .875rem; }
+		</style>
+	}
+}
+
+templ adminStat(title string, count int64) {
+	@card(title) {
+		<strong>{ strconv.FormatInt(count, 10) }</strong>
+	}
+}
