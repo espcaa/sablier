@@ -10,6 +10,25 @@ import (
 	"database/sql"
 )
 
+const countNewPrompts = `-- name: CountNewPrompts :one
+SELECT count(*) FROM prompts p JOIN events e ON e.seq = p.seq
+WHERE e.project_id = ? AND e.kind = 'prompt_sent'
+  AND p.seq > ?2 AND p.seq <= ?3
+`
+
+type CountNewPromptsParams struct {
+	ProjectID  string
+	AfterSeq   int64
+	ThroughSeq int64
+}
+
+func (q *Queries) CountNewPrompts(ctx context.Context, arg CountNewPromptsParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countNewPrompts, arg.ProjectID, arg.AfterSeq, arg.ThroughSeq)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countSessionEvents = `-- name: CountSessionEvents :one
 SELECT count(*) FROM events WHERE session_id = ? AND source = ?
 `
@@ -166,18 +185,6 @@ func (q *Queries) LastEventFrom(ctx context.Context, arg LastEventFromParams) (i
 	return column_1, err
 }
 
-const lastProjectPrompt = `-- name: LastProjectPrompt :one
-SELECT CAST(coalesce(max(p.seq), 0) AS INTEGER) FROM prompts p
-JOIN events e ON e.seq = p.seq WHERE e.project_id = ? AND e.kind = 'prompt_sent'
-`
-
-func (q *Queries) LastProjectPrompt(ctx context.Context, projectID string) (int64, error) {
-	row := q.db.QueryRowContext(ctx, lastProjectPrompt, projectID)
-	var column_1 int64
-	err := row.Scan(&column_1)
-	return column_1, err
-}
-
 const listProjects = `-- name: ListProjects :many
 SELECT DISTINCT project_id FROM events WHERE project_id <> '' ORDER BY project_id
 `
@@ -324,6 +331,24 @@ func (q *Queries) ProjectPromptBatch(ctx context.Context, arg ProjectPromptBatch
 		return nil, err
 	}
 	return items, nil
+}
+
+const projectPromptSummary = `-- name: ProjectPromptSummary :one
+SELECT count(*) AS total, CAST(coalesce(max(p.seq), 0) AS INTEGER) AS last_cached_seq
+FROM events e LEFT JOIN prompts p ON p.seq = e.seq
+WHERE e.project_id = ? AND e.kind = 'prompt_sent'
+`
+
+type ProjectPromptSummaryRow struct {
+	Total         int64
+	LastCachedSeq int64
+}
+
+func (q *Queries) ProjectPromptSummary(ctx context.Context, projectID string) (ProjectPromptSummaryRow, error) {
+	row := q.db.QueryRowContext(ctx, projectPromptSummary, projectID)
+	var i ProjectPromptSummaryRow
+	err := row.Scan(&i.Total, &i.LastCachedSeq)
+	return i, err
 }
 
 const putSessionState = `-- name: PutSessionState :exec

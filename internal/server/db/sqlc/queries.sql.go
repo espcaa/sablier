@@ -11,6 +11,40 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const advanceVerification = `-- name: AdvanceVerification :one
+INSERT INTO verification_checkpoints (user_id, install_id, project_id, last_seq)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (user_id, install_id, project_id) DO UPDATE SET
+    received_at = CASE WHEN excluded.last_seq > verification_checkpoints.last_seq
+                       THEN now() ELSE verification_checkpoints.received_at END,
+    last_seq = greatest(excluded.last_seq, verification_checkpoints.last_seq)
+RETURNING last_seq, received_at
+`
+
+type AdvanceVerificationParams struct {
+	UserID    string
+	InstallID pgtype.UUID
+	ProjectID string
+	LastSeq   int64
+}
+
+type AdvanceVerificationRow struct {
+	LastSeq    int64
+	ReceivedAt pgtype.Timestamptz
+}
+
+func (q *Queries) AdvanceVerification(ctx context.Context, arg AdvanceVerificationParams) (AdvanceVerificationRow, error) {
+	row := q.db.QueryRow(ctx, advanceVerification,
+		arg.UserID,
+		arg.InstallID,
+		arg.ProjectID,
+		arg.LastSeq,
+	)
+	var i AdvanceVerificationRow
+	err := row.Scan(&i.LastSeq, &i.ReceivedAt)
+	return i, err
+}
+
 const claimInstall = `-- name: ClaimInstall :one
 INSERT INTO installs (id, user_id) VALUES ($1, $2)
 ON CONFLICT (id) DO UPDATE SET last_seen_at = now()
@@ -356,4 +390,27 @@ func (q *Queries) UserProjects(ctx context.Context, userID string) ([]Project, e
 		return nil, err
 	}
 	return items, nil
+}
+
+const verificationCheckpoint = `-- name: VerificationCheckpoint :one
+SELECT last_seq, received_at FROM verification_checkpoints
+WHERE user_id = $1 AND install_id = $2 AND project_id = $3
+`
+
+type VerificationCheckpointParams struct {
+	UserID    string
+	InstallID pgtype.UUID
+	ProjectID string
+}
+
+type VerificationCheckpointRow struct {
+	LastSeq    int64
+	ReceivedAt pgtype.Timestamptz
+}
+
+func (q *Queries) VerificationCheckpoint(ctx context.Context, arg VerificationCheckpointParams) (VerificationCheckpointRow, error) {
+	row := q.db.QueryRow(ctx, verificationCheckpoint, arg.UserID, arg.InstallID, arg.ProjectID)
+	var i VerificationCheckpointRow
+	err := row.Scan(&i.LastSeq, &i.ReceivedAt)
+	return i, err
 }

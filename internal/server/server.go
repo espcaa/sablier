@@ -49,6 +49,8 @@ func New(cfg Config, db database, q *sqlc.Queries, auth *hcauth.Client) http.Han
 			r.Use(s.requireKey)
 			r.Get("/me", s.me)
 			r.Post("/events", s.ingest)
+			r.Get("/verify", s.verificationCheckpoint)
+			r.Post("/verify", s.receivePrompts)
 		})
 	})
 	r.NotFound(siteHandler(cfg.SiteDir, cfg.SiteProxy).ServeHTTP)

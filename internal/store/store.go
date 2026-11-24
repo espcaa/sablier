@@ -321,10 +321,14 @@ func (s *Store) ListProjects(ctx context.Context) ([]string, error) {
 	return s.q.ListProjects(ctx)
 }
 
-func (s *Store) LastProjectPrompt(ctx context.Context, project string) (int64, error) {
-	return s.q.LastProjectPrompt(ctx, project)
+func (s *Store) ProjectPromptSummary(ctx context.Context, project string) (sqlc.ProjectPromptSummaryRow, error) {
+	return s.q.ProjectPromptSummary(ctx, project)
 }
 
 func (s *Store) ProjectPromptBatch(ctx context.Context, project string, after, through, limit int64) ([]sqlc.Prompt, error) {
 	return s.q.ProjectPromptBatch(ctx, sqlc.ProjectPromptBatchParams{ProjectID: project, AfterSeq: after, ThroughSeq: through, BatchSize: limit})
+}
+
+func (s *Store) CountNewPrompts(ctx context.Context, project string, after, through int64) (int64, error) {
+	return s.q.CountNewPrompts(ctx, sqlc.CountNewPromptsParams{ProjectID: project, AfterSeq: after, ThroughSeq: through})
 }

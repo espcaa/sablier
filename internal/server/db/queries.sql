@@ -66,3 +66,16 @@ JOIN installs i ON i.id = e.install_id
 WHERE i.user_id = $1 AND e.kind = 'session_start' AND e.session_id = ANY(sqlc.arg(sessions)::text[])
   AND e.data->>'model' <> ''
 ORDER BY e.session_id, e.ts DESC;
+
+-- name: VerificationCheckpoint :one
+SELECT last_seq, received_at FROM verification_checkpoints
+WHERE user_id = $1 AND install_id = $2 AND project_id = $3;
+
+-- name: AdvanceVerification :one
+INSERT INTO verification_checkpoints (user_id, install_id, project_id, last_seq)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (user_id, install_id, project_id) DO UPDATE SET
+    received_at = CASE WHEN excluded.last_seq > verification_checkpoints.last_seq
+                       THEN now() ELSE verification_checkpoints.received_at END,
+    last_seq = greatest(excluded.last_seq, verification_checkpoints.last_seq)
+RETURNING last_seq, received_at;

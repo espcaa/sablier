@@ -53,3 +53,11 @@ type User struct {
 	ApiKey    string
 	CreatedAt pgtype.Timestamptz
 }
+
+type VerificationCheckpoint struct {
+	UserID     string
+	InstallID  pgtype.UUID
+	ProjectID  string
+	LastSeq    int64
+	ReceivedAt pgtype.Timestamptz
+}

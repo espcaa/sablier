@@ -71,12 +71,18 @@ SELECT CAST(COALESCE(max(ts), 0) AS INTEGER) FROM events WHERE harness = ? AND s
 -- name: ListProjects :many
 SELECT DISTINCT project_id FROM events WHERE project_id <> '' ORDER BY project_id;
 
--- name: LastProjectPrompt :one
-SELECT CAST(coalesce(max(p.seq), 0) AS INTEGER) FROM prompts p
-JOIN events e ON e.seq = p.seq WHERE e.project_id = ? AND e.kind = 'prompt_sent';
+-- name: ProjectPromptSummary :one
+SELECT count(*) AS total, CAST(coalesce(max(p.seq), 0) AS INTEGER) AS last_cached_seq
+FROM events e LEFT JOIN prompts p ON p.seq = e.seq
+WHERE e.project_id = ? AND e.kind = 'prompt_sent';
 
 -- name: ProjectPromptBatch :many
 SELECT p.seq, p.text FROM prompts p JOIN events e ON e.seq = p.seq
 WHERE e.project_id = ? AND e.kind = 'prompt_sent'
   AND p.seq > sqlc.arg(after_seq) AND p.seq <= sqlc.arg(through_seq)
 ORDER BY p.seq LIMIT sqlc.arg(batch_size);
+
+-- name: CountNewPrompts :one
+SELECT count(*) FROM prompts p JOIN events e ON e.seq = p.seq
+WHERE e.project_id = ? AND e.kind = 'prompt_sent'
+  AND p.seq > sqlc.arg(after_seq) AND p.seq <= sqlc.arg(through_seq);
