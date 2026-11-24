@@ -24,20 +24,30 @@ type Entry struct {
 templ App(me Me) {
 	@layout("sablier") {
 		@top(me)
-		<p class="sentence">
-			if me.Today.Total == 0 {
-				Nothing tracked today yet. Start your agent through sablier and it shows up here.
-			} else {
-				@templ.Raw(sentence(me.Today))
-			}
-		</p>
+		if me.AllTime.Total == 0 {
+			<div class="less-wide">
+				<p class="sentence">You haven't tracked anything yet :(</p>
+				<p style="margin-bottom:2rem;">If you've logged time but it doesn't appear here, run <code>sablier sync</code>.</p>
+				@linkButton("button", "/docs/getting-started", templ.Attributes{"role": "button"}) {
+					Get started
+				}
+			</div>
+		} else {
+			<p class="sentence">
+				if me.Today.Total == 0 {
+					Nothing tracked today yet. Start your agent through sablier and it shows up here.
+				} else {
+					@templ.Raw(sentence(me.Today))
+				}
+			</p>
+		}
 		<div class="cards">
 			if len(me.AllTime.Projects) > 0 {
 				@card("Projects") {
 					@bars(me.AllTime.Projects)
 				}
+				@modelUsage(me.AllTime)
 			}
-			@modelUsage(me.AllTime)
 		</div>
 		@appStyles()
 	}
@@ -45,6 +55,9 @@ templ App(me Me) {
 
 templ appStyles() {
 	<style>
+		.less-wide {
+		    width: fit-content;
+		}
 		.sentence {
 			max-width: 48rem;
 			font-size: 1.6rem;

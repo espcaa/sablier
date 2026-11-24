@@ -63,27 +63,64 @@ func App(me Me) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<p class=\"sentence\">")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			if me.Today.Total == 0 {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "Nothing tracked today yet. Start your agent through sablier and it shows up here.")
+			if me.AllTime.Total == 0 {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"less-wide\"><p class=\"sentence\">You haven't tracked anything yet :(</p><p style=\"margin-bottom:2rem;\">If you've logged time but it doesn't appear here, run <code>sablier sync</code>.</p>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Var3 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+					templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+					templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+					if !templ_7745c5c3_IsBuffer {
+						defer func() {
+							templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+							if templ_7745c5c3_Err == nil {
+								templ_7745c5c3_Err = templ_7745c5c3_BufErr
+							}
+						}()
+					}
+					ctx = templ.InitializeContext(ctx)
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "Get started")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					return nil
+				})
+				templ_7745c5c3_Err = linkButton("button", "/docs/getting-started", templ.Attributes{"role": "button"}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var3), templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "</div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			} else {
-				templ_7745c5c3_Err = templ.Raw(sentence(me.Today)).Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<p class=\"sentence\">")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				if me.Today.Total == 0 {
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "Nothing tracked today yet. Start your agent through sablier and it shows up here.")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+				} else {
+					templ_7745c5c3_Err = templ.Raw(sentence(me.Today)).Render(ctx, templ_7745c5c3_Buffer)
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "</p>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "</p><div class=\"cards\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, " <div class=\"cards\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			if len(me.AllTime.Projects) > 0 {
-				templ_7745c5c3_Var3 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+				templ_7745c5c3_Var4 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 					templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 					templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 					if !templ_7745c5c3_IsBuffer {
@@ -101,16 +138,16 @@ func App(me Me) templ.Component {
 					}
 					return nil
 				})
-				templ_7745c5c3_Err = card("Projects").Render(templ.WithChildren(ctx, templ_7745c5c3_Var3), templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = card("Projects").Render(templ.WithChildren(ctx, templ_7745c5c3_Var4), templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = modelUsage(me.AllTime).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = modelUsage(me.AllTime).Render(ctx, templ_7745c5c3_Buffer)
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -145,7 +182,7 @@ func appStyles() templ.Component {
 		}
 		ctx = templ.InitializeContext(ctx)
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "<style>\n\t\t.sentence {\n\t\t\tmax-width: 48rem;\n\t\t\tfont-size: 1.6rem;\n\t\t\tline-height: 1.35;\n\t\t\tletter-spacing: -0.01em;\n\t\t\tmargin: 0.5rem 0 0;\n\t\t\ttext-wrap: pretty;\n\t\t}\n\t\t.sentence strong {\n\t\t\tfont-weight: 600;\n\t\t\twhite-space: nowrap;\n\t\t}\n\t\t.sentence .total {\n\t\t\tfont-style: italic;\n\t\t\tcolor: var(--color-accent);\n\t\t\tfont-variant-numeric: tabular-nums;\n\t\t}\n\t\t.cards {\n\t\t\tmargin-top: 2.5rem;\n\t\t\tdisplay: flex;\n\t\t\tflex-wrap: wrap;\n\t\t\talign-items: start;\n\t\t\tgap: 1.5rem;\n\t\t}\n\t\t.cards > .card {\n\t\t\tflex: 1 1 22rem;\n\t\t\tmin-width: 0;\n\t\t\tmax-width: 36rem;\n\t\t}\n\t</style>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<style>\n\t\t.less-wide {\n\t\t    width: fit-content;\n\t\t}\n\t\t.sentence {\n\t\t\tmax-width: 48rem;\n\t\t\tfont-size: 1.6rem;\n\t\t\tline-height: 1.35;\n\t\t\tletter-spacing: -0.01em;\n\t\t\tmargin: 0.5rem 0 0;\n\t\t\ttext-wrap: pretty;\n\t\t}\n\t\t.sentence strong {\n\t\t\tfont-weight: 600;\n\t\t\twhite-space: nowrap;\n\t\t}\n\t\t.sentence .total {\n\t\t\tfont-style: italic;\n\t\t\tcolor: var(--color-accent);\n\t\t\tfont-variant-numeric: tabular-nums;\n\t\t}\n\t\t.cards {\n\t\t\tmargin-top: 2.5rem;\n\t\t\tdisplay: flex;\n\t\t\tflex-wrap: wrap;\n\t\t\talign-items: start;\n\t\t\tgap: 1.5rem;\n\t\t}\n\t\t.cards > .card {\n\t\t\tflex: 1 1 22rem;\n\t\t\tmin-width: 0;\n\t\t\tmax-width: 36rem;\n\t\t}\n\t</style>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

@@ -1,32 +1,40 @@
 package views
 
 type Device struct {
- Hostname string
-	ID string
-	Created string
+	Hostname string
+	ID       string
+	Created  string
 }
 
 templ Settings(me Me, devices []Device) {
 	@layout("settings · sablier") {
 		@top(me)
 		<h1 class="page-title">Settings</h1>
-		<section class="key">
-			<h2>Connected CLI devices</h2>
+		<section class="settings-devices">
+			<h2>Connected devices</h2>
 			if len(devices) == 0 {
-				<p>No connected devices. Run <code>sablier login</code> to connect one.</p>
-			}
-			for _, device := range devices {
-				<form method="post" action="/app/settings/revoke">
-					<input type="hidden" name="id" value={ device.ID }/>
-					if device.Hostname != "" {
-						<strong>{ device.Hostname }</strong>
-					} else {
-						<strong>Unknown device</strong>
+				<p class="device-meta">No connected devices.</p>
+			} else {
+				<ul class="devices">
+					for _, device := range devices {
+						<li class="card">
+							<div class="device-details">
+								if device.Hostname != "" {
+									<strong>{ device.Hostname }</strong>
+								} else {
+									<strong>Unknown device</strong>
+								}
+								<p class="device-meta">Connected { device.Created }</p>
+							</div>
+							<form method="post" action="/app/settings/revoke">
+								<input type="hidden" name="id" value={ device.ID }/>
+								@button(quiet, "submit", templ.Attributes{"aria-label": "Revoke device " + device.Hostname + " connected " + device.Created}) {
+									Revoke
+								}
+							</form>
+						</li>
 					}
-					<code>{ device.ID }</code>
-					<span>{ device.Created }</span>
-					<button class="button quiet" type="submit">Revoke</button>
-				</form>
+				</ul>
 			}
 		</section>
 		@settingsStyles()
@@ -35,17 +43,33 @@ templ Settings(me Me, devices []Device) {
 
 templ settingsStyles() {
 	<style>
-		.key {
-			max-width: 40rem;
+		.settings-devices {
+			width: min(100%, 36rem);
 			margin-top: 1.5rem;
-			display: flex;
-			flex-direction: column;
-			gap: 0.5rem;
 		}
-		.key h2 {
-			font-size: 1rem;
-			font-weight: 600;
+		.settings-devices h2 { font-size: 1.1rem; font-weight: 600; margin-bottom: .75rem; }
+		.devices {
+			display: grid;
+			gap: .75rem;
+			list-style: none;
+			padding: 0;
+			margin: 0;
 		}
+		.devices li {
+			flex-direction: row;
+			align-items: center;
+			justify-content: space-between;
+			flex-wrap: wrap;
+			gap: .75rem 1.25rem;
+			padding: .9rem 1rem;
+		}
+		.device-details {
+			flex: 1 1 13rem;
+			min-width: 0;
+			overflow-wrap: anywhere;
+		}
+		.device-details strong { font-weight: 600; }
+		.device-meta { color: var(--color-muted); font-size: .875rem; }
 		.page-title {
 			font-size: 1.6rem;
 			font-weight: 600;
