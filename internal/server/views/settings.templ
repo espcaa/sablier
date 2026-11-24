@@ -1,0 +1,34 @@
+package views
+
+templ Settings(me Me) {
+	@layout("settings · sablier") {
+		@top(me)
+		<h1 class="page-title">Settings</h1>
+		<section class="key">
+			<h2>API key</h2>
+			@copyField(me.APIKey)
+		</section>
+		@settingsStyles()
+	}
+}
+
+templ settingsStyles() {
+	<style>
+		.key {
+			max-width: 40rem;
+			margin-top: 1.5rem;
+			display: flex;
+			flex-direction: column;
+			gap: 0.5rem;
+		}
+		.key h2 {
+			font-size: 1rem;
+			font-weight: 600;
+		}
+		.page-title {
+			font-size: 1.6rem;
+			font-weight: 600;
+			letter-spacing: -0.01em;
+		}
+	</style>
+}

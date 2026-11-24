@@ -94,3 +94,46 @@ func icon(name string) templ.Component {
 	}
 	return templ.Raw(string(svg))
 }
+
+type modelSlice struct {
+	Entry
+	color string
+	end   string
+}
+
+func modelDistribution(s Summary) ([]modelSlice, string) {
+	colors := [...]string{
+		"var(--color-chart-1)",
+		"var(--color-chart-2)",
+		"var(--color-chart-3)",
+		"var(--color-chart-4)",
+		"var(--color-chart-5)",
+	}
+	var slices []modelSlice
+	var known, other time.Duration
+	for i, e := range s.Models {
+		known += e.Time
+		if i < len(colors) {
+			slices = append(slices, modelSlice{Entry: e, color: colors[i]})
+		} else {
+			other += e.Time
+		}
+	}
+	if other > 0 {
+		slices = append(slices, modelSlice{Entry: Entry{"other models", other}, color: "var(--color-chart-other)"})
+	}
+	if unknown := s.Total - known; unknown > 0 {
+		slices = append(slices, modelSlice{Entry: Entry{"unknown model", unknown}, color: "var(--color-chart-unreported)"})
+	}
+
+	var stops []string
+	var elapsed time.Duration
+	for i, slice := range slices {
+		start := 100 * float64(elapsed) / float64(s.Total)
+		elapsed += slice.Time
+		end := 100 * float64(elapsed) / float64(s.Total)
+		slices[i].end = fmt.Sprintf("%.4f", end)
+		stops = append(stops, fmt.Sprintf("%s %.4f%% %.4f%%", slice.color, start, end))
+	}
+	return slices, "background:conic-gradient(" + strings.Join(stops, ",") + ")"
+}

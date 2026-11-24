@@ -1,0 +1,125 @@
+package views
+
+templ modelUsage(summary Summary) {
+	@card("Model usage") {
+		if len(summary.Models) == 0 {
+			<p class="model-empty">No model usage recorded yet.</p>
+		} else {
+			@modelChart(summary)
+		}
+	}
+	@modelUsageStyles()
+}
+
+templ modelChart(summary Summary) {
+	{{ entries, gradient := modelDistribution(summary) }}
+	<div class="model-chart">
+		<div class="model-ring" style={ templ.SafeCSS(gradient) } aria-hidden="true">
+			<span><strong>{ long(summary.Total) }</strong>all time</span>
+		</div>
+		<ul aria-label="All-time credited time by model">
+			for _, e := range entries {
+				<li data-end={ e.end } data-model={ e.Name } data-duration={ long(e.Time) } aria-label={ e.Name + ", " + long(e.Time) }>
+					<i aria-hidden="true" style={ templ.SafeCSS("background-color:" + e.color) }></i>
+					<span>{ e.Name }</span>
+				</li>
+			}
+		</ul>
+		@chartTooltip()
+	</div>
+}
+
+templ chartTooltip() {
+	<div class="chart-tooltip" aria-hidden="true" hidden></div>
+	<style>
+		.chart-tooltip {
+			position: fixed;
+			z-index: 1;
+			pointer-events: none;
+			max-width: min(18rem, 90vw);
+			overflow-wrap: anywhere;
+			padding: .45rem .7rem;
+			border: 1px solid var(--color-border);
+			border-radius: calc(var(--radius) * 2);
+			background: var(--color-surface);
+			color: var(--color-ink);
+			box-shadow: 0 .2rem .65rem color-mix(in oklch, var(--color-ink) 10%, transparent);
+			font-size: .8rem;
+		}
+	</style>
+	<script>
+		for (const tooltip of document.querySelectorAll(".chart-tooltip")) {
+			if (tooltip.dataset.ready) continue;
+			tooltip.dataset.ready = "true";
+			const chart = tooltip.parentElement;
+			const ring = chart.querySelector(".model-ring");
+			const slices = [...chart.querySelectorAll("[data-end]")];
+			ring.addEventListener("pointermove", (event) => {
+				const rect = ring.getBoundingClientRect();
+				const radius = rect.width / 2;
+				const x = event.clientX - rect.left - radius;
+				const y = event.clientY - rect.top - radius;
+				const distance = Math.hypot(x, y);
+				tooltip.hidden = distance < radius * .73 || distance > radius;
+				if (tooltip.hidden) return;
+
+				const angle = (Math.atan2(x, -y) / (2 * Math.PI) + 1) % 1;
+				const slice = slices.find((entry) => angle * 100 < Number(entry.dataset.end));
+				if (!slice) {
+					tooltip.hidden = true;
+					return;
+				}
+				tooltip.textContent = slice.dataset.model + " · " + slice.dataset.duration;
+				tooltip.style.left = Math.max(4, Math.min(event.clientX + 5, innerWidth - tooltip.offsetWidth - 4)) + "px";
+				tooltip.style.top = Math.max(4, event.clientY - tooltip.offsetHeight - 3) + "px";
+			});
+			ring.addEventListener("pointerleave", () => { tooltip.hidden = true; });
+		}
+	</script>
+}
+
+templ modelUsageStyles() {
+	<style>
+		.model-chart {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: center;
+			gap: 1.4rem;
+		}
+		.model-ring {
+			width: 8rem;
+			aspect-ratio: 1;
+			border-radius: 50%;
+			display: grid;
+			place-items: center;
+		}
+		.model-ring > span {
+			width: 73%;
+			aspect-ratio: 1;
+			border-radius: 50%;
+			background: var(--color-surface);
+			display: flex;
+			flex-direction: column;
+			justify-content: center;
+			align-items: center;
+			color: var(--color-muted);
+			font-size: .8rem;
+		}
+		.model-ring strong { color: var(--color-ink); font-size: 1rem; }
+		.model-chart ul { flex: 0 1 auto; min-width: 0; padding: 0; margin: 0; list-style: none; }
+		.model-chart li {
+			display: grid;
+			grid-template-columns: .6rem minmax(0, 1fr);
+			align-items: center;
+			gap: .55rem;
+			padding: .25rem 0;
+			overflow-wrap: anywhere;
+		}
+		.model-chart i { width: .6rem; height: .6rem; border-radius: 50%; }
+		.model-empty { color: var(--color-muted); }
+		.cards > .card:has(.model-chart, .model-empty) {
+			flex: 0 1 auto;
+			max-width: min(36rem, 100%);
+		}
+	</style>
+}

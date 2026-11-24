@@ -62,6 +62,14 @@
 	--color-warning: oklch(62% 0.18 var(--hue-warning));
 	--color-info: oklch(55% 0.18 var(--hue-info));
 
+	--color-chart-1: var(--color-accent);
+	--color-chart-2: oklch(55% 0.14 295);
+	--color-chart-3: oklch(55% 0.10 175);
+	--color-chart-4: oklch(55% 0.12 65);
+	--color-chart-5: oklch(55% 0.14 245);
+	--color-chart-other: oklch(55% 0.11 135);
+	--color-chart-unreported: oklch(86% 0.015 var(--hue-primary));
+
 	--color-surface-hover: color-mix(in oklch, var(--color-surface), var(--color-ink) 5%);
 
 	color-scheme: light;
