@@ -7,9 +7,7 @@ import (
 	"net/http"
 
 	"github.com/espcaa/sablier/internal/api"
-	"github.com/espcaa/sablier/internal/server/db/sqlc"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -18,51 +16,41 @@ func verificationScope(project, install string) (pgtype.UUID, bool) {
 	return pgtype.UUID{Bytes: id, Valid: err == nil}, err == nil && validProjectID.MatchString(project)
 }
 
-func (s *Server) verificationCheckpoint(w http.ResponseWriter, r *http.Request) {
-	project := r.URL.Query().Get("project")
-	id, ok := verificationScope(project, r.URL.Query().Get("install"))
-	if !ok {
-		writeError(w, 400, "invalid project or install")
-		return
-	}
-	row, err := s.q.VerificationCheckpoint(r.Context(), sqlc.VerificationCheckpointParams{UserID: apiUser(r).ID, InstallID: id, ProjectID: project})
-	w.Header().Set("Cache-Control", "no-store")
-	if errors.Is(err, pgx.ErrNoRows) {
-		writeJSON(w, 200, api.Checkpoint{})
-		return
-	}
-	if err != nil {
-		writeError(w, 500, "cannot read checkpoint")
-		return
-	}
-	writeJSON(w, 200, api.Checkpoint{LastSeq: row.LastSeq, ReceivedAt: &row.ReceivedAt.Time})
-}
-
 func (s *Server) receivePrompts(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.DecisionAPIKey == "" || s.cfg.DecisionAPIURL == "" {
+		writeError(w, http.StatusServiceUnavailable, "verification model is not configured")
+		return
+	}
 	var b api.PromptBatch
 	d := json.NewDecoder(http.MaxBytesReader(w, r.Body, api.VerifyBodyLimit))
 	if err := d.Decode(&b); err != nil || d.Decode(new(json.RawMessage)) != io.EOF {
-		writeError(w, 400, "invalid prompt batch")
+		writeError(w, http.StatusBadRequest, "invalid prompt batch")
 		return
 	}
 	id, ok := verificationScope(b.Project, b.Install)
-	if !ok || len(b.Prompts) == 0 || len(b.Prompts) > api.VerifyBatchSize {
-		writeError(w, 400, "invalid prompt batch")
+	if !ok || b.ThroughSeq <= 0 || len(b.Prompts) > api.MaxReviewPrompts {
+		writeError(w, http.StatusBadRequest, "expected a server-selected review sample, update sablier if needed")
 		return
 	}
 	var last int64
 	for _, p := range b.Prompts {
-		if p.Seq <= last || p.Text == "" {
-			writeError(w, 400, "expected ordered, nonempty prompts")
+		if p.Seq <= last || p.Seq > b.ThroughSeq {
+			writeError(w, http.StatusBadRequest, "expected ordered prompts within the selected sample")
 			return
 		}
 		last = p.Seq
 	}
-	b.Prompts = nil
-	row, err := s.q.AdvanceVerification(r.Context(), sqlc.AdvanceVerificationParams{UserID: apiUser(r).ID, InstallID: id, ProjectID: b.Project, LastSeq: last})
-	if err != nil {
-		writeError(w, 500, "cannot save checkpoint")
-		return
+	result, err := s.analyzePrompts(r.Context(), apiUser(r).ID, id, b)
+	switch {
+	case errors.Is(err, errReviewBudget):
+		writeError(w, http.StatusTooManyRequests, err.Error())
+	case errors.Is(err, errReviewProvider):
+		writeError(w, http.StatusBadGateway, "verification analysis unavailable, rerun verify to retry")
+	case errors.Is(err, errReviewPlan):
+		writeError(w, http.StatusConflict, err.Error())
+	case err != nil:
+		writeError(w, http.StatusInternalServerError, "could not save analysis")
+	default:
+		writeJSON(w, http.StatusOK, result)
 	}
-	writeJSON(w, 200, api.Checkpoint{LastSeq: row.LastSeq, ReceivedAt: &row.ReceivedAt.Time})
 }

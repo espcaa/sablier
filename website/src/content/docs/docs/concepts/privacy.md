@@ -63,4 +63,4 @@ The prompt `hash` is an hmac-sha256 of the prompt (lowercased, spaces squashed),
 
 Everything is in a sqlite database in your data folder (see [configuration](/docs/reference/configuration/)).
 
-That includes the text of every prompt you send, so that if you verify a project later, sablier can send those prompts to our servers, where they will only be used for a quick check and not be processed. You can learn more about how verifying hours work [here](/docs/reference/verify).
+That includes cached prompt text. If you udr `sablier verify`, the cli uploads a subset of your prompts, with their individual hashes.

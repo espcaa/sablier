@@ -5,22 +5,31 @@ import (
 	"net/http"
 	"slices"
 
+	"github.com/espcaa/sablier/internal/server/db/sqlc"
 	"github.com/espcaa/sablier/internal/server/views"
 )
 
-func (s *Server) admin(w http.ResponseWriter, r *http.Request) {
+func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) *sqlc.User {
 	w.Header().Set("Cache-Control", "no-store")
 	if len(s.cfg.AdminUserIDs) == 0 {
 		http.NotFound(w, r)
-		return
+		return nil
 	}
 	user := s.currentUser(r)
 	if user == nil {
 		http.Redirect(w, r, "/auth/login", http.StatusSeeOther)
-		return
+		return nil
 	}
 	if !slices.Contains(s.cfg.AdminUserIDs, user.ID) {
 		http.Error(w, "admin access required", http.StatusForbidden)
+		return nil
+	}
+	return user
+}
+
+func (s *Server) admin(w http.ResponseWriter, r *http.Request) {
+	user := s.requireAdmin(w, r)
+	if user == nil {
 		return
 	}
 	stats, err := s.q.AdminStats(r.Context())

@@ -325,10 +325,12 @@ func (s *Store) ProjectPromptSummary(ctx context.Context, project string) (sqlc.
 	return s.q.ProjectPromptSummary(ctx, project)
 }
 
-func (s *Store) ProjectPromptBatch(ctx context.Context, project string, after, through, limit int64) ([]sqlc.Prompt, error) {
-	return s.q.ProjectPromptBatch(ctx, sqlc.ProjectPromptBatchParams{ProjectID: project, AfterSeq: after, ThroughSeq: through, BatchSize: limit})
+func (s *Store) LocalReviewPrompt(ctx context.Context, project string, seq int64) (sqlc.LocalReviewPromptRow, error) {
+	return s.q.LocalReviewPrompt(ctx, sqlc.LocalReviewPromptParams{ProjectID: project, Seq: seq})
 }
 
-func (s *Store) CountNewPrompts(ctx context.Context, project string, after, through int64) (int64, error) {
-	return s.q.CountNewPrompts(ctx, sqlc.CountNewPromptsParams{ProjectID: project, AfterSeq: after, ThroughSeq: through})
+func (s *Store) MatchesLocalReviewAnchor(ctx context.Context, project string, seq int64, hash string) (bool, error) {
+	return s.q.MatchesLocalReviewAnchor(ctx, sqlc.MatchesLocalReviewAnchorParams{
+		ProjectID: project, Seq: seq, Hash: sql.NullString{String: hash, Valid: true},
+	})
 }

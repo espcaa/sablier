@@ -9,12 +9,15 @@ templ Admin(me Me, stats sqlc.AdminStatsRow) {
 	@layout("admin · sablier") {
 		@top(me)
 		<h1 class="admin-title">Admin</h1>
+		@linkButton(quiet, "/admin/reviews", nil) {
+			Project evidence
+		}
 		<div class="admin-stats">
 			@adminStat("Total accounts", stats.Accounts)
 			@adminStat("New accounts · 30 days", stats.NewAccounts30d)
 			@adminStat("Active accounts · 7 days", stats.Active7d)
 			@adminStat("Active accounts · 30 days", stats.Active30d)
-			@adminStat("Projects with prompt receipts · 30 days", stats.VerifiedProjects30d)
+			@adminStat("Projects analyzed · 30 days", stats.VerifiedProjects30d)
 		</div>
 		<style>
 			.admin-title {

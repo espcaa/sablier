@@ -1,0 +1,85 @@
+package views
+
+import "strconv"
+
+type ReviewHeatDay struct {
+	Label string
+	Hours [24]ReviewHeatCell
+}
+
+type ReviewHeatCell struct {
+	Label string
+	Count int
+}
+
+func heatLevel(count int) string {
+	switch {
+	case count == 0:
+		return "0"
+	case count <= 5:
+		return "1"
+	case count <= 20:
+		return "2"
+	case count <= 60:
+		return "3"
+	default:
+		return "4"
+	}
+}
+
+templ reviewHeatmap(days []ReviewHeatDay) {
+	@card("Heartbeat heatmap") {
+		<div class="heatmap-scroll" role="region" aria-label="Hourly heartbeat activity" tabindex="0">
+			<div class="heatmap">
+				<span></span>
+				for hour := range 24 {
+					<span class="heatmap-hour">
+						if hour % 3 == 0 {
+							{ strconv.Itoa(hour) }
+						}
+					</span>
+				}
+				for _, day := range days {
+					<span class="heatmap-day">{ day.Label }</span>
+					for _, cell := range day.Hours {
+						<span class="heatmap-cell" data-level={ heatLevel(cell.Count) } title={ cell.Label } aria-label={ cell.Label }></span>
+					}
+				}
+			</div>
+		</div>
+		<div class="heatmap-legend" aria-label="Heartbeats per hour">
+			for i, label := range []string{"0", "1–5", "6–20", "21–60", "61+"} {
+				<span><i class="heatmap-cell" data-level={ strconv.Itoa(i) } aria-hidden="true"></i>{ label }</span>
+			}
+		</div>
+	}
+	<style>
+		.heatmap-scroll { overflow-x: auto; padding: .2rem; }
+		.heatmap {
+			display: grid;
+			grid-template-columns: 6.2rem repeat(24, minmax(.9rem, 1fr));
+			column-gap: .28rem;
+			row-gap: .12rem;
+			align-items: center;
+			min-width: 36rem;
+		}
+		.heatmap-day, .heatmap-hour, .heatmap-legend {
+			font: .75rem var(--font-mono);
+			color: var(--color-muted);
+		}
+		.heatmap-hour { text-align: center; min-height: 1rem; }
+		.heatmap-cell {
+			display: block;
+			height: .9rem;
+			border-radius: .2rem;
+			background: var(--color-surface-hover);
+		}
+		.heatmap-cell[data-level="1"] { background: color-mix(in oklch, var(--color-accent) 23%, var(--color-surface)); }
+		.heatmap-cell[data-level="2"] { background: color-mix(in oklch, var(--color-accent) 45%, var(--color-surface)); }
+		.heatmap-cell[data-level="3"] { background: color-mix(in oklch, var(--color-accent) 70%, var(--color-surface)); }
+		.heatmap-cell[data-level="4"] { background: var(--color-accent); }
+		.heatmap-legend { display: flex; flex-wrap: wrap; gap: .35rem .75rem; }
+		.heatmap-legend > span { display: inline-flex; align-items: center; gap: .35rem; }
+		.heatmap-legend i { width: .75rem; height: .75rem; }
+	</style>
+}

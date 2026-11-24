@@ -70,10 +70,38 @@ type User struct {
 	CreatedAt pgtype.Timestamptz
 }
 
+type VerificationAnalysis struct {
+	UserID      string
+	InstallID   pgtype.UUID
+	ProjectID   string
+	LastSeq     int64
+	Unavailable int64
+	AnalyzedAt  pgtype.Timestamptz
+}
+
 type VerificationCheckpoint struct {
 	UserID     string
 	InstallID  pgtype.UUID
 	ProjectID  string
 	LastSeq    int64
 	ReceivedAt pgtype.Timestamptz
+}
+
+type VerificationReviewPlan struct {
+	UserID     string
+	InstallID  pgtype.UUID
+	ProjectID  string
+	ThroughSeq int64
+	Sequences  []int64
+}
+
+type VerificationReviewSignal struct {
+	UserID    string
+	InstallID pgtype.UUID
+	ProjectID string
+	Seq       int64
+	EventHour pgtype.Timestamptz
+	Label     string
+	Model     string
+	Metadata  []byte
 }

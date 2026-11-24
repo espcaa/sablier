@@ -23,7 +23,11 @@ func eventFlag(ts, received time.Time, chained bool) flag {
 	if !chained {
 		return flagUnchained
 	}
-	switch d := received.Sub(ts); {
+	return timingFlag(received.Sub(ts))
+}
+
+func timingFlag(d time.Duration) flag {
+	switch {
 	case d > 72*time.Hour:
 		return flagBackfill
 	case d > 24*time.Hour:

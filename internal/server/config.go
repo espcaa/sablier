@@ -17,12 +17,16 @@ type Config struct {
 	SiteProxy   string // in dev, astro's dev server instead of SiteDir
 
 	AdminUserIDs         []string
+	DecisionAPIKey       string
+	DecisionAPIURL       string
 	HackClubClientID     string
 	HackClubClientSecret string
 }
 
 func ConfigFromEnv() (Config, error) {
 	c := Config{
+		DecisionAPIKey:       os.Getenv("DECISION_API_KEY"),
+		DecisionAPIURL:       os.Getenv("DECISION_API_URL"),
 		Addr:                 os.Getenv("SABLIER_ADDR"),
 		DatabaseURL:          os.Getenv("DATABASE_URL"),
 		BaseURL:              strings.TrimSuffix(os.Getenv("SABLIER_BASE_URL"), "/"),

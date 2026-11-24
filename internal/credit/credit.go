@@ -2,6 +2,7 @@
 package credit
 
 import (
+	"container/heap"
 	"fmt"
 	"sort"
 	"time"
@@ -33,10 +34,12 @@ type span struct{ start, end time.Time }
 // a credited window, anchor is action that started it
 type window struct {
 	span
-	project  string
-	session  string
-	anchor   time.Time
+	project string
+	session string
+	anchor  time.Time
+
 	observed bool
+	mouse    bool
 }
 
 // rules, per session:
@@ -52,6 +55,16 @@ func Compute(events []event.Event, r Rules, until time.Time) Report {
 
 // from and until bound the credited windows.
 func ComputeBetween(events []event.Event, r Rules, from, until time.Time) Report {
+	return InspectBetween(events, r, from, until, nil)
+}
+
+type Interval struct {
+	Start, End                time.Time
+	Project, Session          string
+	ObservedInput, MouseInput bool
+}
+
+func InspectBetween(events []event.Event, r Rules, from, until time.Time, inspect func(Interval)) Report {
 	rep := Report{ByProject: map[string]time.Duration{}, BySession: map[string]time.Duration{}}
 	if len(events) == 0 {
 		return rep
@@ -86,7 +99,11 @@ func ComputeBetween(events []event.Event, r Rules, from, until time.Time) Report
 		busy[i] = clip(busy[i], from, until)
 	}
 
-	rep.Credited = attribute(windows, func(w window, d time.Duration) {
+	rep.Credited = attribute(windows, func(w window, start, end time.Time) {
+		d := end.Sub(start)
+		if inspect != nil {
+			inspect(Interval{start, end, w.project, w.session, w.observed, w.mouse})
+		}
 		rep.ByProject[w.project] += d
 		rep.BySession[w.session] += d
 	})
@@ -140,7 +157,7 @@ func session(events []event.Event, r Rules, until time.Time) ([]window, []span, 
 				if d.Keys > 0 || d.Mouse > 0 || d.Pasted {
 					from := e.TS.Add(-time.Duration(d.WindowMs) * time.Millisecond)
 					out = append(out,
-						window{span: span{from, e.TS}, project: e.ProjectID, session: e.SessionID, anchor: e.TS, observed: true},
+						window{span: span{from, e.TS}, project: e.ProjectID, session: e.SessionID, anchor: e.TS, observed: true, mouse: d.Mouse > 0},
 						window{span: span{e.TS, e.TS.Add(r.InputCap)}, project: e.ProjectID, session: e.SessionID, anchor: e.TS},
 					)
 				}
@@ -264,34 +281,65 @@ func clip(s span, from, until time.Time) span {
 }
 
 // splits time at window edges and attributes each piece once
-func attribute(ws []window, add func(window, time.Duration)) time.Duration {
-	var points []time.Time
-	for _, w := range ws {
-		points = append(points, w.start, w.end)
+func attribute(ws []window, add func(window, time.Time, time.Time)) time.Duration {
+	points := make([]time.Time, 0, len(ws)*2)
+	starts := make([]int, 0, len(ws))
+	for i, w := range ws {
+		if w.start.Before(w.end) {
+			points = append(points, w.start, w.end)
+			starts = append(starts, i)
+		}
 	}
 	sort.Slice(points, func(i, j int) bool { return points[i].Before(points[j]) })
-
+	sort.Slice(starts, func(i, j int) bool { return ws[starts[i]].start.Before(ws[starts[j]].start) })
+	active := windowHeap{windows: ws}
+	next := 0
 	var total time.Duration
 	for i := 0; i+1 < len(points); i++ {
 		a, b := points[i], points[i+1]
 		if !a.Before(b) {
 			continue
 		}
-		best := -1
-		for j, w := range ws {
-			if w.start.After(a) || w.end.Before(b) {
-				continue
-			}
-			if best < 0 || w.precedes(ws[best]) {
-				best = j
-			}
+		for next < len(starts) && !ws[starts[next]].start.After(a) {
+			heap.Push(&active, starts[next])
+			next++
 		}
-		if best >= 0 {
-			add(ws[best], b.Sub(a))
+		for active.Len() > 0 && !ws[active.indices[0]].end.After(a) {
+			heap.Pop(&active)
+		}
+		if active.Len() > 0 {
+			add(ws[active.indices[0]], a, b)
 			total += b.Sub(a)
 		}
 	}
 	return total
+}
+
+type windowHeap struct {
+	windows []window
+	indices []int
+}
+
+func (h windowHeap) Len() int { return len(h.indices) }
+
+func (h windowHeap) Less(i, j int) bool {
+	a, b := h.indices[i], h.indices[j]
+	if h.windows[a].precedes(h.windows[b]) {
+		return true
+	}
+	if h.windows[b].precedes(h.windows[a]) {
+		return false
+	}
+	return a < b
+}
+
+func (h windowHeap) Swap(i, j int) { h.indices[i], h.indices[j] = h.indices[j], h.indices[i] }
+func (h *windowHeap) Push(v any)   { h.indices = append(h.indices, v.(int)) }
+func (h *windowHeap) Pop() any {
+	i := len(h.indices) - 1
+	v := h.indices[i]
+	h.indices = h.indices[:i]
+	return v
 }
 
 func (w window) precedes(other window) bool {
@@ -306,7 +354,7 @@ func union(spans []span) time.Duration {
 	for i, s := range spans {
 		ws[i] = window{span: s}
 	}
-	return attribute(ws, func(window, time.Duration) {})
+	return attribute(ws, func(window, time.Time, time.Time) {})
 }
 
 // minutes, like 0m, 27m, 1h05m

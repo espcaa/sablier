@@ -1,0 +1,179 @@
+package views
+
+import (
+	"fmt"
+	"net/url"
+	"time"
+
+	"github.com/espcaa/sablier/internal/server/db/sqlc"
+)
+
+type ProjectReviewData struct {
+	Account, Project                                                                         string
+	TotalTracked, Credited, Observed, Focused, Mouse                                         time.Duration
+	Installs, EventCount, Early, Late, Offline, Unchained, Prompts, TotalPrompts, Classified int
+	Unavailable                                                                              int64
+	Heatmap                                                                                  []ReviewHeatDay
+	Jev                                                                                      map[string]int
+}
+
+func reviewProjectLink(account, project string) templ.SafeURL {
+	return templ.URL("/admin/reviews?" + (url.Values{"account": {account}, "project": {project}}).Encode())
+}
+
+func reviewShare[T ~int | ~int64](part, total T) string {
+	if total <= 0 {
+		return "—"
+	}
+	return fmt.Sprintf("%.1f%%", 100*float64(part)/float64(total))
+}
+
+templ ReviewIndex(me Me, projects []sqlc.ReviewProjectsRow) {
+	@layout("project evidence · sablier") {
+		@top(me)
+		<div class="review-page">
+			<a href="/admin">Admin</a>
+			<h1>Project evidence</h1>
+			@card("Submitted projects") {
+				if len(projects) == 0 {
+					<p>No projects have completed an analysis batch yet.</p>
+				}
+				for _, project := range projects {
+					<a class="review-project" href={ reviewProjectLink(project.UserID, project.ProjectID) }>
+						<strong>{ project.ProjectID }</strong>
+						<span>{ project.Name }</span>
+					</a>
+				}
+			}
+		</div>
+		@reviewStyles()
+	}
+}
+
+templ ProjectReview(me Me, r ProjectReviewData) {
+	@layout("project evidence · sablier") {
+		@top(me)
+		<div class="review-page">
+			@linkButton(quiet, "/admin/reviews", nil) {
+				Back to projects
+			}
+			<div class="review-heading">
+				<p class="review-credit" aria-label="Total tracked time"><strong>{ long(r.TotalTracked) }</strong></p>
+				<h1>{ r.Project }</h1>
+			</div>
+			@card("Verification coverage") {
+				<p><strong>{ reviewShare(r.Credited, r.TotalTracked) }</strong> of tracked time covered by verification ({ long(r.Credited) } of { long(r.TotalTracked) })</p>
+				<p>Decision model analyzed { fmt.Sprintf("%d of %d tracked prompts", r.Classified, r.TotalPrompts) }.</p>
+			}
+			<div class="review-metrics" role="group" aria-label="Project metrics">
+				@reviewMetric("Heartbeats", fmt.Sprint(r.EventCount))
+				@reviewMetric("Good quality prompts", reviewShare(r.Jev["iteration"], r.Classified))
+				@reviewMetric("Scroll / click", reviewShare(r.Mouse, r.Credited))
+			</div>
+			@reviewHeatmap(r.Heatmap)
+			<div class="review-breakdown">
+				@card("Time breakdown") {
+					<dl>
+						@reviewDetail("Focused time", reviewShare(r.Focused, r.Credited))
+						@reviewDetail("Recorded input", long(r.Observed))
+						@reviewDetail("Inferred time", long(max(0, r.Credited-r.Observed)))
+					</dl>
+				}
+				@card("Sync and prompt coverage") {
+					<dl>
+						@reviewDetail("Prompts covered by verification", fmt.Sprintf("%d / %d", r.Prompts, r.TotalPrompts))
+						@reviewDetail("Prompts analyzed by the decision model", fmt.Sprintf("%d / %d", r.Classified, r.TotalPrompts))
+						@reviewDetail("Unavailable prompts", fmt.Sprint(r.Unavailable))
+						@reviewDetail("Late (10min to 24h)", fmt.Sprint(r.Late))
+						@reviewDetail("Backlog (over 24h)", fmt.Sprint(r.Offline))
+						@reviewDetail("Early heartbeats", fmt.Sprint(r.Early))
+						@reviewDetail("Unchained heartbeats", fmt.Sprint(r.Unchained))
+						@reviewDetail("Devices", fmt.Sprint(r.Installs))
+					</dl>
+				}
+			</div>
+		</div>
+		@reviewStyles()
+	}
+}
+
+templ reviewMetric(label, value string) {
+	@card("") {
+		<dl class="review-stat">
+			<dt>{ label }</dt>
+			<dd>{ value }</dd>
+		</dl>
+	}
+}
+
+templ reviewDetail(label, value string) {
+	<div>
+		<dt>{ label }</dt>
+		<dd>{ value }</dd>
+	</div>
+}
+
+templ reviewStyles() {
+	<style>
+		.review-page { width: min(100%, 65rem); display: grid; gap: 1rem; overflow-wrap: anywhere; }
+		.review-heading { display: grid; justify-items: start; gap: .45rem; margin-top: .35rem; }
+		.review-credit {
+			background: var(--color-accent);
+			color: var(--color-surface);
+			border-radius: 999px;
+			padding: .25rem .7rem;
+		}
+		.review-credit strong { font-size: 1.4rem; }
+		.review-page h1 { font-size: 1.6rem; line-height: 1.2; }
+		.review-page a { color: var(--color-accent); }
+		.review-project { border-top: 1px solid var(--color-border); padding-top: .65rem; }
+		.review-project { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .5rem; }
+		.review-muted { color: var(--color-muted); font-size: .875rem; }
+		.review-metrics {
+			display: grid;
+			grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 10rem));
+			gap: .65rem;
+			margin: 0;
+		}
+		.review-page > a {
+			width: fit-content;
+		}
+
+		.review-metrics > .card {
+			aspect-ratio: 1;
+			padding: 1rem;
+			justify-content: center;
+		}
+		.review-stat {
+			display: flex;
+			flex-direction: column-reverse;
+			gap: .45rem;
+			margin: 0;
+		}
+		.review-stat dt { color: var(--color-muted); font-size: .875rem; }
+		.review-stat dd {
+			margin: 0;
+			font-size: clamp(1.45rem, 3vw, 2rem);
+			color: var(--color-accent);
+			font-weight: 600;
+			line-height: 1.1;
+			white-space: nowrap;
+			font-variant-numeric: tabular-nums;
+		}
+		.review-breakdown {
+			display: grid;
+			grid-template-columns: repeat(auto-fit, minmax(min(20rem, 100%), 1fr));
+			gap: .65rem;
+			align-items: start;
+		}
+		.review-breakdown dl { margin: 0; }
+		.review-breakdown dl > div {
+			display: flex;
+			justify-content: space-between;
+			gap: 1rem;
+			padding-block: .45rem;
+		}
+		.review-breakdown dl > div + div { border-top: 1px solid var(--color-border); }
+		.review-breakdown dd { margin: 0; font-weight: 600; white-space: nowrap; }
+	</style>
+}

@@ -10,25 +10,6 @@ import (
 	"database/sql"
 )
 
-const countNewPrompts = `-- name: CountNewPrompts :one
-SELECT count(*) FROM prompts p JOIN events e ON e.seq = p.seq
-WHERE e.project_id = ? AND e.kind = 'prompt_sent'
-  AND p.seq > ?2 AND p.seq <= ?3
-`
-
-type CountNewPromptsParams struct {
-	ProjectID  string
-	AfterSeq   int64
-	ThroughSeq int64
-}
-
-func (q *Queries) CountNewPrompts(ctx context.Context, arg CountNewPromptsParams) (int64, error) {
-	row := q.db.QueryRowContext(ctx, countNewPrompts, arg.ProjectID, arg.AfterSeq, arg.ThroughSeq)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const countSessionEvents = `-- name: CountSessionEvents :one
 SELECT count(*) FROM events WHERE session_id = ? AND source = ?
 `
@@ -212,6 +193,29 @@ func (q *Queries) ListProjects(ctx context.Context) ([]string, error) {
 	return items, nil
 }
 
+const localReviewPrompt = `-- name: LocalReviewPrompt :one
+SELECT p.text, e.session_id, e.ts FROM prompts p JOIN events e ON e.seq = p.seq
+WHERE e.project_id = ? AND p.seq = ? AND e.kind = 'prompt_sent'
+`
+
+type LocalReviewPromptParams struct {
+	ProjectID string
+	Seq       int64
+}
+
+type LocalReviewPromptRow struct {
+	Text      string
+	SessionID string
+	Ts        int64
+}
+
+func (q *Queries) LocalReviewPrompt(ctx context.Context, arg LocalReviewPromptParams) (LocalReviewPromptRow, error) {
+	row := q.db.QueryRowContext(ctx, localReviewPrompt, arg.ProjectID, arg.Seq)
+	var i LocalReviewPromptRow
+	err := row.Scan(&i.Text, &i.SessionID, &i.Ts)
+	return i, err
+}
+
 const markAllPending = `-- name: MarkAllPending :exec
 UPDATE events SET uploaded_at = NULL
 `
@@ -235,6 +239,23 @@ type MarkUploadedParams struct {
 func (q *Queries) MarkUploaded(ctx context.Context, arg MarkUploadedParams) error {
 	_, err := q.db.ExecContext(ctx, markUploaded, arg.UploadedAt, arg.UpToSeq)
 	return err
+}
+
+const matchesLocalReviewAnchor = `-- name: MatchesLocalReviewAnchor :one
+SELECT EXISTS(SELECT 1 FROM events WHERE seq = ? AND project_id = ? AND hash = ?)
+`
+
+type MatchesLocalReviewAnchorParams struct {
+	Seq       int64
+	ProjectID string
+	Hash      sql.NullString
+}
+
+func (q *Queries) MatchesLocalReviewAnchor(ctx context.Context, arg MatchesLocalReviewAnchorParams) (bool, error) {
+	row := q.db.QueryRowContext(ctx, matchesLocalReviewAnchor, arg.Seq, arg.ProjectID, arg.Hash)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const pendingEvents = `-- name: PendingEvents :many
@@ -291,63 +312,21 @@ func (q *Queries) PrevHash(ctx context.Context, seq int64) (string, error) {
 	return column_1, err
 }
 
-const projectPromptBatch = `-- name: ProjectPromptBatch :many
-SELECT p.seq, p.text FROM prompts p JOIN events e ON e.seq = p.seq
-WHERE e.project_id = ? AND e.kind = 'prompt_sent'
-  AND p.seq > ?2 AND p.seq <= ?3
-ORDER BY p.seq LIMIT ?4
-`
-
-type ProjectPromptBatchParams struct {
-	ProjectID  string
-	AfterSeq   int64
-	ThroughSeq int64
-	BatchSize  int64
-}
-
-func (q *Queries) ProjectPromptBatch(ctx context.Context, arg ProjectPromptBatchParams) ([]Prompt, error) {
-	rows, err := q.db.QueryContext(ctx, projectPromptBatch,
-		arg.ProjectID,
-		arg.AfterSeq,
-		arg.ThroughSeq,
-		arg.BatchSize,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []Prompt
-	for rows.Next() {
-		var i Prompt
-		if err := rows.Scan(&i.Seq, &i.Text); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const projectPromptSummary = `-- name: ProjectPromptSummary :one
-SELECT count(*) AS total, CAST(coalesce(max(p.seq), 0) AS INTEGER) AS last_cached_seq
+SELECT count(*) AS total, count(p.seq) AS cached
 FROM events e LEFT JOIN prompts p ON p.seq = e.seq
 WHERE e.project_id = ? AND e.kind = 'prompt_sent'
 `
 
 type ProjectPromptSummaryRow struct {
-	Total         int64
-	LastCachedSeq int64
+	Total  int64
+	Cached int64
 }
 
 func (q *Queries) ProjectPromptSummary(ctx context.Context, projectID string) (ProjectPromptSummaryRow, error) {
 	row := q.db.QueryRowContext(ctx, projectPromptSummary, projectID)
 	var i ProjectPromptSummaryRow
-	err := row.Scan(&i.Total, &i.LastCachedSeq)
+	err := row.Scan(&i.Total, &i.Cached)
 	return i, err
 }
 

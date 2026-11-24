@@ -31,6 +31,9 @@ type Server struct {
 }
 
 func New(cfg Config, db database, q *sqlc.Queries, auth *hcauth.Client) http.Handler {
+	if cfg.DecisionAPIURL == "" {
+		log.Print("DECISION_API_URL not set, prompt verification is off")
+	}
 	s := &Server{cfg: cfg, db: db, q: q, auth: auth}
 
 	r := chi.NewRouter()
@@ -47,6 +50,7 @@ func New(cfg Config, db database, q *sqlc.Queries, auth *hcauth.Client) http.Han
 		r.Get("/health", s.health)
 		r.Get("/app", s.app)
 		r.Get("/admin", s.admin)
+		r.Get("/admin/reviews", s.adminReviews)
 		r.Get("/app/settings", s.settings)
 		r.Post("/app/settings/revoke", sameOrigin(s.revokeDevice))
 		r.Get("/auth/login", s.login)
@@ -57,8 +61,9 @@ func New(cfg Config, db database, q *sqlc.Queries, auth *hcauth.Client) http.Han
 			r.Use(s.requireKey)
 			r.Get("/me", s.me)
 			r.Post("/events", s.ingest)
-			r.Get("/verify", s.verificationCheckpoint)
 			r.Post("/verify", s.receivePrompts)
+			r.Post("/verify/plan", s.reviewPlan)
+			r.Get("/verify/installs", s.reviewInstalls)
 		})
 	})
 	r.NotFound(siteHandler(cfg.SiteDir, cfg.SiteProxy).ServeHTTP)

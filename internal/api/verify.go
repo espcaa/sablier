@@ -7,59 +7,73 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"time"
 )
 
-const VerifyBatchSize = 100
-const VerifyBodyLimit = 16 << 20
+const VerifyBodyLimit = 8 << 20
+const MaxReviewPrompts = 10
+const MaxReviewPromptBytes = 128 << 10
 
-type Checkpoint struct {
-	LastSeq    int64      `json:"last_seq"`
-	ReceivedAt *time.Time `json:"received_at,omitempty"`
+type ReviewPlan struct {
+	ThroughSeq int64   `json:"through_seq"`
+	Sequences  []int64 `json:"sequences"`
+}
+
+type ReviewResult struct {
+	AnalyzedSeq int64 `json:"analyzed_seq"`
+	Unavailable int64 `json:"unavailable,omitempty"`
+	Classified  int   `json:"classified,omitempty"`
 }
 
 type Prompt struct {
+	Key  []byte `json:"key,omitempty"`
 	Seq  int64  `json:"seq"`
 	Text string `json:"text"`
 }
 
 type PromptBatch struct {
-	Project string   `json:"project"`
-	Install string   `json:"install"`
-	Prompts []Prompt `json:"prompts"`
+	ThroughSeq int64    `json:"through_seq"`
+	Project    string   `json:"project"`
+	Install    string   `json:"install"`
+	Prompts    []Prompt `json:"prompts"`
 }
 
-func (c *Client) Checkpoint(ctx context.Context, project, install string) (Checkpoint, error) {
+// get which prompts to send to the server (we are not sending everything as that would use too much tokens)
+func (c *Client) ReviewPlan(ctx context.Context, project, install string) (ReviewPlan, error) {
 	query := url.Values{"project": {project}, "install": {install}}
-	var result Checkpoint
-	err := c.do(ctx, http.MethodGet, "/v1/verify?"+query.Encode(), nil, &result)
+	var result ReviewPlan
+	err := c.do(ctx, http.MethodPost, "/v1/verify/plan?"+query.Encode(), nil, &result)
 	return result, err
 }
 
-// sends a prefix that fits, returning the server's checkpoint
-func (c *Client) SendPrompts(ctx context.Context, b PromptBatch) (Checkpoint, error) {
-	var result Checkpoint
+func (c *Client) SendPrompts(ctx context.Context, b PromptBatch) (ReviewResult, error) {
+	var result ReviewResult
 	body, err := json.Marshal(b)
-	for err == nil && len(body) > VerifyBodyLimit && len(b.Prompts) > 1 {
-		b.Prompts = b.Prompts[:len(b.Prompts)/2]
-		body, err = json.Marshal(b)
-	}
 	if err != nil {
 		return result, err
 	}
-	if len(b.Prompts) == 0 {
-		return result, fmt.Errorf("empty prompt batch")
-	}
 	if len(body) > VerifyBodyLimit {
-		return result, fmt.Errorf("prompt %d exceeds the 16 MiB request limit", b.Prompts[0].Seq)
+		return result, fmt.Errorf("review sample exceeds the request size limit")
 	}
 	httpClient := *c.HTTP
 	httpClient.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	client := *c
 	client.HTTP = &httpClient
 	err = client.do(ctx, http.MethodPost, "/v1/verify", bytes.NewReader(body), &result)
-	if err == nil && result.LastSeq < b.Prompts[len(b.Prompts)-1].Seq {
+	if err == nil && result.AnalyzedSeq < b.ThroughSeq {
 		return result, fmt.Errorf("server did not acknowledge this batch")
 	}
+	return result, err
+}
+
+type ReviewInstall struct {
+	Install string `json:"install"`
+	Seq     int64  `json:"seq"`
+	Hash    string `json:"hash"`
+}
+
+func (c *Client) ReviewInstalls(ctx context.Context, project string) ([]ReviewInstall, error) {
+	query := url.Values{"project": {project}}
+	var result []ReviewInstall
+	err := c.do(ctx, http.MethodGet, "/v1/verify/installs?"+query.Encode(), nil, &result)
 	return result, err
 }
