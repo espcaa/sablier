@@ -1,16 +1,42 @@
--- api_key is only used when the user is new
 -- name: UpsertUser :one
-INSERT INTO users (id, slack_id, name, api_key) VALUES ($1, $2, $3, $4)
+INSERT INTO users (id, slack_id, name) VALUES ($1, $2, $3)
 ON CONFLICT (id) DO UPDATE SET slack_id = excluded.slack_id, name = excluded.name
 RETURNING *;
 
--- name: UserByAPIKey :one
-SELECT * FROM users WHERE api_key = $1;
+-- name: UserByDeviceToken :one
+SELECT u.* FROM users u JOIN device_credentials d ON d.user_id = u.id
+WHERE d.token_hash = $1;
 
--- name: SetAPIKey :exec
-UPDATE users SET api_key = $2 WHERE id = $1;
+-- name: CreateDeviceCredential :exec
+INSERT INTO device_credentials (id, user_id, token_hash, hostname) VALUES ($1, $2, $3, $4);
 
--- creates the install on first sight. no row back means it belongs to someone else
+-- name: DeviceCredentials :many
+SELECT id, created_at, hostname FROM device_credentials WHERE user_id = $1 ORDER BY created_at DESC, id;
+
+-- name: RevokeDeviceCredential :exec
+DELETE FROM device_credentials WHERE id = $1 AND user_id = $2;
+
+-- name: DeleteExpiredDeviceLogins :exec
+DELETE FROM device_login_requests WHERE expires_at <= now();
+
+-- name: CreateDeviceLogin :exec
+INSERT INTO device_login_requests (approval_hash, poll_hash, hostname, expires_at)
+VALUES ($1, $2, $3, now() + interval '5 minutes');
+
+-- name: PendingDeviceLogin :one
+SELECT hostname FROM device_login_requests WHERE approval_hash = $1
+AND user_id IS NULL AND NOT denied AND expires_at > now();
+
+-- name: DecideDeviceLogin :execrows
+UPDATE device_login_requests SET user_id = $2, denied = $3
+WHERE approval_hash = $1 AND user_id IS NULL AND NOT denied AND expires_at > now();
+
+-- name: PollDeviceLogin :one
+SELECT user_id, denied, hostname FROM device_login_requests WHERE poll_hash = $1 AND expires_at > now() FOR UPDATE;
+
+-- name: ConsumeDeviceLogin :exec
+DELETE FROM device_login_requests WHERE poll_hash = $1;
+
 -- name: ClaimInstall :one
 INSERT INTO installs (id, user_id) VALUES ($1, $2)
 ON CONFLICT (id) DO UPDATE SET last_seen_at = now()

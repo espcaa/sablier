@@ -104,16 +104,8 @@ func TestSignInFlow(t *testing.T) {
 		t.Fatalf("after sign in (%d): %s", code, body)
 	}
 	code, body = get(t, browser, app.URL+"/app/settings")
-	if code != 200 || !strings.Contains(body, "sab_") {
+	if code != 200 || !strings.Contains(body, "No connected devices") {
 		t.Fatalf("settings (%d): %s", code, body)
-	}
-
-	// signing in again keeps the same key
-	key := body[strings.Index(body, "sab_"):][:44]
-	get(t, browser, app.URL+"/auth/login")
-	_, body = get(t, browser, app.URL+"/app/settings")
-	if !strings.Contains(body, key) {
-		t.Fatal("api key changed on second sign in")
 	}
 
 	resp, err := browser.PostForm(app.URL+"/auth/logout", nil)

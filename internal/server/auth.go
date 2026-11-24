@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
-	"encoding/hex"
 	"log"
 	"net/http"
 	"strings"
@@ -73,7 +72,6 @@ func (s *Server) callback(w http.ResponseWriter, r *http.Request) {
 		ID:      id.ID,
 		SlackID: pgtype.Text{String: id.SlackID, Valid: id.SlackID != ""},
 		Name:    id.Name(),
-		ApiKey:  newAPIKey(), // only used if the user is new
 	})
 	if err != nil {
 		log.Print(err)
@@ -93,6 +91,13 @@ func (s *Server) callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.SetCookie(w, s.cookie(sessionCookie, session, "/", sessionTTL))
+	if pending, err := r.Cookie(cliLoginCookie); err == nil {
+		http.SetCookie(w, s.cookie(cliLoginCookie, "", "/auth", -1))
+		if cliSecret.MatchString(pending.Value) {
+			http.Redirect(w, r, "/cli/authorize?request="+pending.Value, http.StatusFound)
+			return
+		}
+	}
 	http.Redirect(w, r, "/app", http.StatusFound)
 }
 
@@ -139,12 +144,6 @@ func randomToken() string {
 	b := make([]byte, 32)
 	rand.Read(b)
 	return base64.RawURLEncoding.EncodeToString(b)
-}
-
-func newAPIKey() string {
-	b := make([]byte, 20)
-	rand.Read(b)
-	return "sab_" + hex.EncodeToString(b)
 }
 
 func hash(token string) []byte {

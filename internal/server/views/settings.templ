@@ -1,12 +1,33 @@
 package views
 
-templ Settings(me Me) {
+type Device struct {
+ Hostname string
+	ID string
+	Created string
+}
+
+templ Settings(me Me, devices []Device) {
 	@layout("settings · sablier") {
 		@top(me)
 		<h1 class="page-title">Settings</h1>
 		<section class="key">
-			<h2>API key</h2>
-			@copyField(me.APIKey)
+			<h2>Connected CLI devices</h2>
+			if len(devices) == 0 {
+				<p>No connected devices. Run <code>sablier login</code> to connect one.</p>
+			}
+			for _, device := range devices {
+				<form method="post" action="/app/settings/revoke">
+					<input type="hidden" name="id" value={ device.ID }/>
+					if device.Hostname != "" {
+						<strong>{ device.Hostname }</strong>
+					} else {
+						<strong>Unknown device</strong>
+					}
+					<code>{ device.ID }</code>
+					<span>{ device.Created }</span>
+					<button class="button quiet" type="submit">Revoke</button>
+				</form>
+			}
 		</section>
 		@settingsStyles()
 	}

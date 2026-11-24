@@ -1,66 +1,48 @@
 package cli
 
 import (
-	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
+	"github.com/espcaa/sablier/internal/api"
 	"github.com/espcaa/sablier/internal/config"
 )
 
-func runLogin(t *testing.T, stdin string, args ...string) (string, error) {
-	t.Helper()
-	root := NewRootCmd()
-	var out bytes.Buffer
-	root.SetIn(strings.NewReader(stdin))
-	root.SetOut(&out)
-	root.SetErr(&out)
-	root.SetArgs(append([]string{"login"}, args...))
-	err := root.Execute()
-	return out.String(), err
-}
-
-func TestLogin(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer sab_good" {
-			w.WriteHeader(401)
+func TestDeviceLoginPollsAndSavesCredential(t *testing.T) {
+	t.Setenv("SABLIER_CONFIG", filepath.Join(t.TempDir(), "config"))
+	token := "sbd_" + strings.Repeat("x", 43)
+	var polls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/cli/token" {
+			t.Error("unexpected token route")
+			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		w.Write([]byte(`{"id":"ident!a1","name":"Alice B"}`))
+		var request map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil || request["poll_token"] != "secret" {
+			t.Error("expected the private polling token")
+		}
+		if polls.Add(1) == 1 {
+			json.NewEncoder(w).Encode(api.DeviceCredential{Status: "pending"})
+			return
+		}
+		json.NewEncoder(w).Encode(api.DeviceCredential{Status: "approved", Token: token, DeviceID: "fixture"})
 	}))
-	defer srv.Close()
-	cfgPath := filepath.Join(t.TempDir(), "sablier.cfg")
-	t.Setenv("SABLIER_CONFIG", cfgPath)
+	defer server.Close()
 
-	if _, err := runLogin(t, "sab_bad\n", "--api-url", srv.URL); err == nil || !strings.Contains(err.Error(), "invalid api key") {
-		t.Fatalf("bad key: %v", err)
+	cfg := config.Config{APIURL: server.URL}
+	err := waitForDevice(t.Context(), NewRootCmd(), cfg, api.New(server.URL, ""), "secret", time.Millisecond)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if _, err := os.Stat(cfgPath); !os.IsNotExist(err) {
-		t.Fatal("config saved for a bad key")
-	}
-
-	out, err := runLogin(t, "  sab_good \n", "--api-url", srv.URL+"/")
-	if err != nil || !strings.Contains(out, "signed in as Alice B") {
-		t.Fatalf("got %q, %v", out, err)
-	}
-	c, _ := config.Load()
-	if c.APIKey != "sab_good" || c.APIURL != srv.URL {
-		t.Fatalf("saved %+v", c)
-	}
-
-	// the url is remembered
-	if _, err := runLogin(t, "sab_good\n"); err != nil {
-		t.Fatalf("second login: %v", err)
-	}
-}
-
-func TestLoginEmptyKey(t *testing.T) {
-	t.Setenv("SABLIER_CONFIG", filepath.Join(t.TempDir(), "sablier.cfg"))
-	if _, err := runLogin(t, "\n"); err == nil || !strings.Contains(err.Error(), "no api key") {
-		t.Fatalf("got %v", err)
+	cfg, err = config.Load()
+	if err != nil || cfg.APIKey != token || cfg.APIURL != server.URL || polls.Load() != 2 {
+		t.Fatal("api key was not saved after approval")
 	}
 }

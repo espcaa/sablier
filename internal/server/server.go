@@ -36,11 +36,18 @@ func New(cfg Config, db database, q *sqlc.Queries, auth *hcauth.Client) http.Han
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID, middleware.Recoverer)
 
+	r.Post("/cli/start", s.startDeviceLogin)
+	r.Get("/cli/authorize", s.authorizeCLI)
+	r.Post("/cli/authorize", sameOrigin(s.approveCLI))
+	r.Post("/cli/token", s.redeemCLI)
+	r.Get("/cli/done", s.deviceDone)
+
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Logger)
 		r.Get("/health", s.health)
 		r.Get("/app", s.app)
 		r.Get("/app/settings", s.settings)
+		r.Post("/app/settings/revoke", sameOrigin(s.revokeDevice))
 		r.Get("/auth/login", s.login)
 		r.Get("/auth/callback", s.callback)
 		r.Post("/auth/logout", s.logout)
@@ -86,7 +93,7 @@ func (s *Server) app(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "couldn't load your projects", http.StatusInternalServerError)
 		return
 	}
-	views.App(views.Me{Name: u.Name, SlackID: u.SlackID.String, APIKey: u.ApiKey, Today: today, AllTime: all}).Render(r.Context(), w)
+	views.App(views.Me{Name: u.Name, SlackID: u.SlackID.String, Today: today, AllTime: all}).Render(r.Context(), w)
 }
 
 func (s *Server) settings(w http.ResponseWriter, r *http.Request) {
@@ -95,7 +102,16 @@ func (s *Server) settings(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/auth/login", http.StatusFound)
 		return
 	}
-	views.Settings(views.Me{Name: u.Name, SlackID: u.SlackID.String, APIKey: u.ApiKey}).Render(r.Context(), w)
+	rows, err := s.q.DeviceCredentials(r.Context(), u.ID)
+	if err != nil {
+		http.Error(w, "could not load devices", http.StatusInternalServerError)
+		return
+	}
+	devices := make([]views.Device, 0, len(rows))
+	for _, row := range rows {
+		devices = append(devices, views.Device{ID: row.ID.String(), Hostname: row.Hostname, Created: row.CreatedAt.Time.UTC().Format("2 Jan 2006, 15:04 UTC")})
+	}
+	views.Settings(views.Me{Name: u.Name, SlackID: u.SlackID.String}, devices).Render(r.Context(), w)
 }
 
 // serves until ctx is done, then shuts down gracefully

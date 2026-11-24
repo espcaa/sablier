@@ -1,0 +1,109 @@
+package views
+
+templ devicePage(title string) {
+	@layout(title + " · sablier") {
+		<div class="device-page">
+			<a class="device-wordmark" href="/">sablier</a>
+			{ children... }
+		</div>
+		@deviceStyles()
+	}
+}
+
+templ DeviceConsent(approval, hostname string) {
+	@devicePage("account link") {
+		<section class="card device-card">
+			<h1>Link this app to your account?</h1>
+			<p>Only allow this if you just ran <code>sablier login</code>.</p>
+			<form action="/cli/authorize" method="post">
+				<input type="hidden" name="request" value={ approval }/>
+				@button(quiet, "submit", templ.Attributes{"name": "decision", "value": "deny"}) {
+					Cancel
+				}
+				@button(primary, "submit", templ.Attributes{"name": "decision", "value": "allow"}) {
+					Allow
+				}
+			</form>
+		</section>
+	}
+}
+
+templ DeviceDone() {
+	@devicePage("link success") {
+		<section class="card device-card device-done">
+			<span class="device-check" aria-hidden="true"></span>
+			<p class="message">Device approved</p>
+			@linkButton("button quiet", "/app", templ.Attributes{"role": "button"}) {
+				Go home
+			}
+		</section>
+	}
+}
+
+templ deviceStyles() {
+	<style>
+		main:has(.device-page) {
+			min-height: 100dvh;
+			justify-content: center;
+			align-items: center;
+			padding: 1.5rem 1rem;
+		}
+		.device-page {
+			width: min(100%, 36rem);
+			display: grid;
+			gap: 2rem;
+		}
+		.device-wordmark {
+			justify-self: center;
+			color: var(--color-ink);
+			font-size: 1.5rem;
+			font-style: italic;
+			font-weight: 700;
+			letter-spacing: -.03em;
+			text-decoration: none;
+		}
+		.device-card {
+			padding: clamp(1.25rem, 4vw, 2rem);
+		}
+		.device-card h1 {
+			font-size: 1.5rem;
+			line-height: 1.25;
+			letter-spacing: -.025em;
+		}
+		.device-card p { color: var(--color-muted); }
+		.device-card form {
+			display: flex;
+			flex-wrap: wrap;
+			justify-content: flex-end;
+			gap: .75rem;
+			margin-top: .5rem;
+		}
+		.device-card form .button {
+			padding: .6rem 1.4rem;
+		}
+		.device-card form .quiet { border: 1px solid var(--color-border); }
+		.device-done { align-items: center; text-align: center; }
+		.device-check {
+			width: 4.5rem;
+			aspect-ratio: 1;
+			display: grid;
+			place-items: center;
+			border-radius: 50%;
+			background: var(--color-accent);
+			color: var(--color-surface);
+		}
+		.device-check::after {
+			content: "";
+			width: 1.25rem;
+			height: .65rem;
+			border: solid currentColor;
+			border-width: 0 0 .22rem .22rem;
+			transform: translateY(-.13rem) rotate(-45deg);
+		}
+		.message {
+		    color: var(--color-ink) !important;
+			font-size: 1.25rem;
+			font-weight: 500;
+		}
+	</style>
+}

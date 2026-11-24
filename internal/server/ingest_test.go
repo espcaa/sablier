@@ -35,9 +35,8 @@ func ev(seq int64) event.Event {
 func ingestSetup(t *testing.T) (http.Handler, *sqlc.Queries) {
 	pool := testPool(t)
 	q := sqlc.New(pool)
-	ctx := context.Background()
-	q.UpsertUser(ctx, sqlc.UpsertUserParams{ID: "ident!a", ApiKey: "sab_a"})
-	q.UpsertUser(ctx, sqlc.UpsertUserParams{ID: "ident!b", ApiKey: "sab_b"})
+	seedDevice(t, q, "ident!a", "", "sab_a")
+	seedDevice(t, q, "ident!b", "", "sab_b")
 	return New(Config{}, pool, q, nil), q
 }
 

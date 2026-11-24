@@ -4,7 +4,7 @@ title: sablier login
 
 ## sablier login
 
-save your api key, after checking it with the server
+sign in through your browser
 
 ```
 sablier login [flags]
@@ -13,8 +13,9 @@ sablier login [flags]
 ### Options
 
 ```
-      --api-url string   server url (default: from the config, else https://sablier.hackclub.cc)
+      --api-url string   server url
   -h, --help             help for login
+      --no-browser       print the sign-in link without opening a browser
 ```
 
 ### SEE ALSO

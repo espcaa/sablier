@@ -39,7 +39,7 @@ func TestToday(t *testing.T) {
 	pool := testPool(t)
 	q := sqlc.New(pool)
 	ctx := context.Background()
-	q.UpsertUser(ctx, sqlc.UpsertUserParams{ID: "ident!a", ApiKey: "sab_a"})
+	seedDevice(t, q, "ident!a", "", "sab_a")
 	s := &Server{q: q}
 	sd := &seed{q: q, seq: map[string]int64{}}
 	noon := time.Date(2026, 11, 20, 12, 0, 0, 0, time.Local)

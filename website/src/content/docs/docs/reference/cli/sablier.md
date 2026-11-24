@@ -21,7 +21,7 @@ the time you actually spend working with it.
 
 * [sablier claude](../sablier_claude/)	 - run claude code through sablier
 * [sablier codex](../sablier_codex/)	 - run codex through sablier
-* [sablier login](../sablier_login/)	 - save your api key, after checking it with the server
+* [sablier login](../sablier_login/)	 - sign in through your browser
 * [sablier opencode](../sablier_opencode/)	 - run opencode through sablier
 * [sablier status](../sablier_status/)	 - check the account, sync and each harness
 * [sablier sync](../sablier_sync/)	 - upload tracked events to the server

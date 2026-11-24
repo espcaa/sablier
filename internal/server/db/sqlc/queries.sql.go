@@ -57,12 +57,57 @@ type ClaimInstallParams struct {
 	UserID string
 }
 
-// creates the install on first sight. no row back means it belongs to someone else
 func (q *Queries) ClaimInstall(ctx context.Context, arg ClaimInstallParams) (pgtype.UUID, error) {
 	row := q.db.QueryRow(ctx, claimInstall, arg.ID, arg.UserID)
 	var id pgtype.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const consumeDeviceLogin = `-- name: ConsumeDeviceLogin :exec
+DELETE FROM device_login_requests WHERE poll_hash = $1
+`
+
+func (q *Queries) ConsumeDeviceLogin(ctx context.Context, pollHash []byte) error {
+	_, err := q.db.Exec(ctx, consumeDeviceLogin, pollHash)
+	return err
+}
+
+const createDeviceCredential = `-- name: CreateDeviceCredential :exec
+INSERT INTO device_credentials (id, user_id, token_hash, hostname) VALUES ($1, $2, $3, $4)
+`
+
+type CreateDeviceCredentialParams struct {
+	ID        pgtype.UUID
+	UserID    string
+	TokenHash []byte
+	Hostname  string
+}
+
+func (q *Queries) CreateDeviceCredential(ctx context.Context, arg CreateDeviceCredentialParams) error {
+	_, err := q.db.Exec(ctx, createDeviceCredential,
+		arg.ID,
+		arg.UserID,
+		arg.TokenHash,
+		arg.Hostname,
+	)
+	return err
+}
+
+const createDeviceLogin = `-- name: CreateDeviceLogin :exec
+INSERT INTO device_login_requests (approval_hash, poll_hash, hostname, expires_at)
+VALUES ($1, $2, $3, now() + interval '5 minutes')
+`
+
+type CreateDeviceLoginParams struct {
+	ApprovalHash []byte
+	PollHash     []byte
+	Hostname     string
+}
+
+func (q *Queries) CreateDeviceLogin(ctx context.Context, arg CreateDeviceLoginParams) error {
+	_, err := q.db.Exec(ctx, createDeviceLogin, arg.ApprovalHash, arg.PollHash, arg.Hostname)
+	return err
 }
 
 const createSession = `-- name: CreateSession :exec
@@ -80,6 +125,34 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) er
 	return err
 }
 
+const decideDeviceLogin = `-- name: DecideDeviceLogin :execrows
+UPDATE device_login_requests SET user_id = $2, denied = $3
+WHERE approval_hash = $1 AND user_id IS NULL AND NOT denied AND expires_at > now()
+`
+
+type DecideDeviceLoginParams struct {
+	ApprovalHash []byte
+	UserID       pgtype.Text
+	Denied       bool
+}
+
+func (q *Queries) DecideDeviceLogin(ctx context.Context, arg DecideDeviceLoginParams) (int64, error) {
+	result, err := q.db.Exec(ctx, decideDeviceLogin, arg.ApprovalHash, arg.UserID, arg.Denied)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteExpiredDeviceLogins = `-- name: DeleteExpiredDeviceLogins :exec
+DELETE FROM device_login_requests WHERE expires_at <= now()
+`
+
+func (q *Queries) DeleteExpiredDeviceLogins(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, deleteExpiredDeviceLogins)
+	return err
+}
+
 const deleteSession = `-- name: DeleteSession :exec
 DELETE FROM sessions WHERE token_hash = $1
 `
@@ -87,6 +160,36 @@ DELETE FROM sessions WHERE token_hash = $1
 func (q *Queries) DeleteSession(ctx context.Context, tokenHash []byte) error {
 	_, err := q.db.Exec(ctx, deleteSession, tokenHash)
 	return err
+}
+
+const deviceCredentials = `-- name: DeviceCredentials :many
+SELECT id, created_at, hostname FROM device_credentials WHERE user_id = $1 ORDER BY created_at DESC, id
+`
+
+type DeviceCredentialsRow struct {
+	ID        pgtype.UUID
+	CreatedAt pgtype.Timestamptz
+	Hostname  string
+}
+
+func (q *Queries) DeviceCredentials(ctx context.Context, userID string) ([]DeviceCredentialsRow, error) {
+	rows, err := q.db.Query(ctx, deviceCredentials, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DeviceCredentialsRow
+	for rows.Next() {
+		var i DeviceCredentialsRow
+		if err := rows.Scan(&i.ID, &i.CreatedAt, &i.Hostname); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const insertEvent = `-- name: InsertEvent :execrows
@@ -147,6 +250,49 @@ func (q *Queries) InstallHead(ctx context.Context, id pgtype.UUID) (InstallHeadR
 	return i, err
 }
 
+const pendingDeviceLogin = `-- name: PendingDeviceLogin :one
+SELECT hostname FROM device_login_requests WHERE approval_hash = $1
+AND user_id IS NULL AND NOT denied AND expires_at > now()
+`
+
+func (q *Queries) PendingDeviceLogin(ctx context.Context, approvalHash []byte) (string, error) {
+	row := q.db.QueryRow(ctx, pendingDeviceLogin, approvalHash)
+	var hostname string
+	err := row.Scan(&hostname)
+	return hostname, err
+}
+
+const pollDeviceLogin = `-- name: PollDeviceLogin :one
+SELECT user_id, denied, hostname FROM device_login_requests WHERE poll_hash = $1 AND expires_at > now() FOR UPDATE
+`
+
+type PollDeviceLoginRow struct {
+	UserID   pgtype.Text
+	Denied   bool
+	Hostname string
+}
+
+func (q *Queries) PollDeviceLogin(ctx context.Context, pollHash []byte) (PollDeviceLoginRow, error) {
+	row := q.db.QueryRow(ctx, pollDeviceLogin, pollHash)
+	var i PollDeviceLoginRow
+	err := row.Scan(&i.UserID, &i.Denied, &i.Hostname)
+	return i, err
+}
+
+const revokeDeviceCredential = `-- name: RevokeDeviceCredential :exec
+DELETE FROM device_credentials WHERE id = $1 AND user_id = $2
+`
+
+type RevokeDeviceCredentialParams struct {
+	ID     pgtype.UUID
+	UserID string
+}
+
+func (q *Queries) RevokeDeviceCredential(ctx context.Context, arg RevokeDeviceCredentialParams) error {
+	_, err := q.db.Exec(ctx, revokeDeviceCredential, arg.ID, arg.UserID)
+	return err
+}
+
 const sessionModels = `-- name: SessionModels :many
 SELECT DISTINCT ON (e.session_id) e.session_id, (e.data->>'model')::text AS model
 FROM events e
@@ -184,20 +330,6 @@ func (q *Queries) SessionModels(ctx context.Context, arg SessionModelsParams) ([
 		return nil, err
 	}
 	return items, nil
-}
-
-const setAPIKey = `-- name: SetAPIKey :exec
-UPDATE users SET api_key = $2 WHERE id = $1
-`
-
-type SetAPIKeyParams struct {
-	ID     string
-	ApiKey string
-}
-
-func (q *Queries) SetAPIKey(ctx context.Context, arg SetAPIKeyParams) error {
-	_, err := q.db.Exec(ctx, setAPIKey, arg.ID, arg.ApiKey)
-	return err
 }
 
 const setInstallHead = `-- name: SetInstallHead :exec
@@ -248,56 +380,48 @@ func (q *Queries) UpsertProject(ctx context.Context, arg UpsertProjectParams) er
 }
 
 const upsertUser = `-- name: UpsertUser :one
-INSERT INTO users (id, slack_id, name, api_key) VALUES ($1, $2, $3, $4)
+INSERT INTO users (id, slack_id, name) VALUES ($1, $2, $3)
 ON CONFLICT (id) DO UPDATE SET slack_id = excluded.slack_id, name = excluded.name
-RETURNING id, slack_id, name, api_key, created_at
+RETURNING id, slack_id, name, created_at
 `
 
 type UpsertUserParams struct {
 	ID      string
 	SlackID pgtype.Text
 	Name    string
-	ApiKey  string
 }
 
-// api_key is only used when the user is new
 func (q *Queries) UpsertUser(ctx context.Context, arg UpsertUserParams) (User, error) {
-	row := q.db.QueryRow(ctx, upsertUser,
-		arg.ID,
-		arg.SlackID,
-		arg.Name,
-		arg.ApiKey,
-	)
+	row := q.db.QueryRow(ctx, upsertUser, arg.ID, arg.SlackID, arg.Name)
 	var i User
 	err := row.Scan(
 		&i.ID,
 		&i.SlackID,
 		&i.Name,
-		&i.ApiKey,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
-const userByAPIKey = `-- name: UserByAPIKey :one
-SELECT id, slack_id, name, api_key, created_at FROM users WHERE api_key = $1
+const userByDeviceToken = `-- name: UserByDeviceToken :one
+SELECT u.id, u.slack_id, u.name, u.created_at FROM users u JOIN device_credentials d ON d.user_id = u.id
+WHERE d.token_hash = $1
 `
 
-func (q *Queries) UserByAPIKey(ctx context.Context, apiKey string) (User, error) {
-	row := q.db.QueryRow(ctx, userByAPIKey, apiKey)
+func (q *Queries) UserByDeviceToken(ctx context.Context, tokenHash []byte) (User, error) {
+	row := q.db.QueryRow(ctx, userByDeviceToken, tokenHash)
 	var i User
 	err := row.Scan(
 		&i.ID,
 		&i.SlackID,
 		&i.Name,
-		&i.ApiKey,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const userBySession = `-- name: UserBySession :one
-SELECT u.id, u.slack_id, u.name, u.api_key, u.created_at FROM sessions s
+SELECT u.id, u.slack_id, u.name, u.created_at FROM sessions s
 JOIN users u ON u.id = s.user_id
 WHERE s.token_hash = $1 AND s.expires_at > now()
 `
@@ -309,7 +433,6 @@ func (q *Queries) UserBySession(ctx context.Context, tokenHash []byte) (User, er
 		&i.ID,
 		&i.SlackID,
 		&i.Name,
-		&i.ApiKey,
 		&i.CreatedAt,
 	)
 	return i, err

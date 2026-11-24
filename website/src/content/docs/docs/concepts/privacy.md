@@ -15,7 +15,7 @@ description: Are we evil,,,
 
 Sablier works with a bunch of events, heartbeats that we use along with some heuristics to calculate the time you spent on something. (The server's algorithm is the same as the one used in `sablier today`)
 
-`sablier sync` sends them in batches of up to 500, with your api key and a `sablier/<version> (<os>/<arch>)` user agent:
+`sablier sync` sends them in batches of up to 500, with your device credential and a `sablier/<version> (<os>/<arch>)` user agent:
 
 ```json
 {

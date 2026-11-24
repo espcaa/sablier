@@ -19,7 +19,7 @@ func (s *Server) requireKey(next http.Handler) http.Handler {
 			writeError(w, http.StatusUnauthorized, "missing api key")
 			return
 		}
-		u, err := s.q.UserByAPIKey(r.Context(), key)
+		u, err := s.q.UserByDeviceToken(r.Context(), hash(key))
 		if err != nil {
 			writeError(w, http.StatusUnauthorized, "invalid api key")
 			return

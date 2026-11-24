@@ -8,6 +8,23 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type DeviceCredential struct {
+	ID        pgtype.UUID
+	UserID    string
+	TokenHash []byte
+	CreatedAt pgtype.Timestamptz
+	Hostname  string
+}
+
+type DeviceLoginRequest struct {
+	ApprovalHash []byte
+	PollHash     []byte
+	Hostname     string
+	UserID       pgtype.Text
+	Denied       bool
+	ExpiresAt    pgtype.Timestamptz
+}
+
 type Event struct {
 	InstallID  pgtype.UUID
 	Seq        int64
@@ -50,7 +67,6 @@ type User struct {
 	ID        string
 	SlackID   pgtype.Text
 	Name      string
-	ApiKey    string
 	CreatedAt pgtype.Timestamptz
 }
 
