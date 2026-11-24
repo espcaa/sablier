@@ -47,6 +47,11 @@ type window struct {
 //
 // nothing is counted after until.
 func Compute(events []event.Event, r Rules, until time.Time) Report {
+	return ComputeBetween(events, r, time.Time{}, until)
+}
+
+// from and until bound the credited windows.
+func ComputeBetween(events []event.Event, r Rules, from, until time.Time) Report {
 	rep := Report{ByProject: map[string]time.Duration{}, BySession: map[string]time.Duration{}}
 	if len(events) == 0 {
 		return rep
@@ -75,10 +80,10 @@ func Compute(events []event.Event, r Rules, until time.Time) Report {
 	}
 
 	for i := range windows {
-		windows[i].span = clip(windows[i].span, until)
+		windows[i].span = clip(windows[i].span, from, until)
 	}
 	for i := range busy {
-		busy[i] = clip(busy[i], until)
+		busy[i] = clip(busy[i], from, until)
 	}
 
 	rep.Credited = attribute(windows, func(w window, d time.Duration) {
@@ -247,7 +252,8 @@ func latest(a, b time.Time) time.Time {
 	return b
 }
 
-func clip(s span, until time.Time) span {
+func clip(s span, from, until time.Time) span {
+	s.start = latest(s.start, from)
 	if s.end.After(until) {
 		s.end = until
 	}

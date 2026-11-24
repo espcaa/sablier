@@ -316,3 +316,15 @@ func fromRows(rows []sqlc.Event) []event.Event {
 	}
 	return out
 }
+
+func (s *Store) ListProjects(ctx context.Context) ([]string, error) {
+	return s.q.ListProjects(ctx)
+}
+
+func (s *Store) LastProjectPrompt(ctx context.Context, project string) (int64, error) {
+	return s.q.LastProjectPrompt(ctx, project)
+}
+
+func (s *Store) ProjectPromptBatch(ctx context.Context, project string, after, through, limit int64) ([]sqlc.Prompt, error) {
+	return s.q.ProjectPromptBatch(ctx, sqlc.ProjectPromptBatchParams{ProjectID: project, AfterSeq: after, ThroughSeq: through, BatchSize: limit})
+}

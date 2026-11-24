@@ -166,6 +166,45 @@ func (q *Queries) LastEventFrom(ctx context.Context, arg LastEventFromParams) (i
 	return column_1, err
 }
 
+const lastProjectPrompt = `-- name: LastProjectPrompt :one
+SELECT CAST(coalesce(max(p.seq), 0) AS INTEGER) FROM prompts p
+JOIN events e ON e.seq = p.seq WHERE e.project_id = ? AND e.kind = 'prompt_sent'
+`
+
+func (q *Queries) LastProjectPrompt(ctx context.Context, projectID string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, lastProjectPrompt, projectID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const listProjects = `-- name: ListProjects :many
+SELECT DISTINCT project_id FROM events WHERE project_id <> '' ORDER BY project_id
+`
+
+func (q *Queries) ListProjects(ctx context.Context) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listProjects)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var project_id string
+		if err := rows.Scan(&project_id); err != nil {
+			return nil, err
+		}
+		items = append(items, project_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const markAllPending = `-- name: MarkAllPending :exec
 UPDATE events SET uploaded_at = NULL
 `
@@ -243,6 +282,48 @@ func (q *Queries) PrevHash(ctx context.Context, seq int64) (string, error) {
 	var column_1 string
 	err := row.Scan(&column_1)
 	return column_1, err
+}
+
+const projectPromptBatch = `-- name: ProjectPromptBatch :many
+SELECT p.seq, p.text FROM prompts p JOIN events e ON e.seq = p.seq
+WHERE e.project_id = ? AND e.kind = 'prompt_sent'
+  AND p.seq > ?2 AND p.seq <= ?3
+ORDER BY p.seq LIMIT ?4
+`
+
+type ProjectPromptBatchParams struct {
+	ProjectID  string
+	AfterSeq   int64
+	ThroughSeq int64
+	BatchSize  int64
+}
+
+func (q *Queries) ProjectPromptBatch(ctx context.Context, arg ProjectPromptBatchParams) ([]Prompt, error) {
+	rows, err := q.db.QueryContext(ctx, projectPromptBatch,
+		arg.ProjectID,
+		arg.AfterSeq,
+		arg.ThroughSeq,
+		arg.BatchSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Prompt
+	for rows.Next() {
+		var i Prompt
+		if err := rows.Scan(&i.Seq, &i.Text); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const putSessionState = `-- name: PutSessionState :exec

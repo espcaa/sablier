@@ -67,3 +67,16 @@ FROM events;
 
 -- name: LastEventFrom :one
 SELECT CAST(COALESCE(max(ts), 0) AS INTEGER) FROM events WHERE harness = ? AND source = ?;
+
+-- name: ListProjects :many
+SELECT DISTINCT project_id FROM events WHERE project_id <> '' ORDER BY project_id;
+
+-- name: LastProjectPrompt :one
+SELECT CAST(coalesce(max(p.seq), 0) AS INTEGER) FROM prompts p
+JOIN events e ON e.seq = p.seq WHERE e.project_id = ? AND e.kind = 'prompt_sent';
+
+-- name: ProjectPromptBatch :many
+SELECT p.seq, p.text FROM prompts p JOIN events e ON e.seq = p.seq
+WHERE e.project_id = ? AND e.kind = 'prompt_sent'
+  AND p.seq > sqlc.arg(after_seq) AND p.seq <= sqlc.arg(through_seq)
+ORDER BY p.seq LIMIT sqlc.arg(batch_size);
