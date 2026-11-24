@@ -63,7 +63,7 @@ func Admin(me Me, stats sqlc.AdminStatsRow) templ.Component {
 					}()
 				}
 				ctx = templ.InitializeContext(ctx)
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "Project evidence")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "Review")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}

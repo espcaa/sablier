@@ -32,17 +32,23 @@ templ ReviewIndex(me Me, projects []sqlc.ReviewProjectsRow) {
 	@layout("project evidence · sablier") {
 		@top(me)
 		<div class="review-page">
-			<a href="/admin">Admin</a>
+			@linkButton(quiet, "/admin", nil) {
+				Go back
+			}
 			<h1>Project evidence</h1>
 			@card("Submitted projects") {
 				if len(projects) == 0 {
 					<p>No projects have completed an analysis batch yet.</p>
 				}
 				for _, project := range projects {
-					<a class="review-project" href={ reviewProjectLink(project.UserID, project.ProjectID) }>
-						<strong>{ project.ProjectID }</strong>
-						<span>{ project.Name }</span>
-					</a>
+					<div class="project">
+						<a class="review-project" href={ reviewProjectLink(project.UserID, project.ProjectID) }>
+							<strong>{ project.ProjectID }</strong>
+						</a>
+						@linkButton(quiet, reviewProjectLink(project.UserID, project.ProjectID), nil) {
+							Review
+						}
+					</div>
 				}
 			}
 		</div>
@@ -125,6 +131,7 @@ templ reviewStyles() {
 		}
 		.review-credit strong { font-size: 1.4rem; }
 		.review-page h1 { font-size: 1.6rem; line-height: 1.2; }
+		.project { display: flex; flex-direction: row; justify-content: space-between; width: 100%;}
 		.review-page a { color: var(--color-accent); }
 		.review-project { border-top: 1px solid var(--color-border); padding-top: .65rem; }
 		.review-project { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .5rem; }

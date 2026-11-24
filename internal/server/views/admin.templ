@@ -10,7 +10,7 @@ templ Admin(me Me, stats sqlc.AdminStatsRow) {
 		@top(me)
 		<h1 class="admin-title">Admin</h1>
 		@linkButton(quiet, "/admin/reviews", nil) {
-			Project evidence
+			Review
 		}
 		<div class="admin-stats">
 			@adminStat("Total accounts", stats.Accounts)
