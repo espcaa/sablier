@@ -31,9 +31,6 @@ type Server struct {
 }
 
 func New(cfg Config, db database, q *sqlc.Queries, auth *hcauth.Client) http.Handler {
-	if cfg.DecisionAPIURL == "" {
-		log.Print("DECISION_API_URL not set, prompt verification is off")
-	}
 	s := &Server{cfg: cfg, db: db, q: q, auth: auth}
 
 	r := chi.NewRouter()

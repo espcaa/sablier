@@ -111,28 +111,22 @@ FROM (
 -- name: AnalysisCheckpoint :one
 SELECT last_seq FROM verification_analysis WHERE user_id = $1 AND install_id = $2 AND project_id = $3;
 
--- name: LockAccountAnalysis :exec
-SELECT pg_advisory_xact_lock(hashtextextended(sqlc.arg(scope)::text, 0));
-
 -- name: AdvanceAnalysis :exec
-INSERT INTO verification_analysis (user_id, install_id, project_id, last_seq, unavailable)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO verification_analysis (user_id, install_id, project_id, last_seq)
+VALUES ($1, $2, $3, $4)
 ON CONFLICT (user_id, install_id, project_id) DO UPDATE
-SET last_seq = excluded.last_seq, analyzed_at = now(), unavailable = verification_analysis.unavailable + excluded.unavailable;
+SET last_seq = excluded.last_seq, analyzed_at = now();
 
--- name: ReviewPromptEvents :many
-SELECT e.seq, e.ts, e.session_id, e.data, e.hash FROM events e JOIN installs i ON e.install_id = i.id
+-- name: ReviewCandidates :many
+SELECT e.seq, e.ts FROM events e JOIN installs i ON e.install_id = i.id
 WHERE i.user_id = $1 AND e.install_id = $2 AND e.project_id = $3 AND e.kind = 'prompt_sent'
-AND e.seq = ANY(sqlc.arg(sequences)::bigint[]);
+AND e.seq > sqlc.arg(after_seq) AND e.hash IS NOT NULL
+ORDER BY e.seq LIMIT 500;
 
 -- name: ReviewHourCounts :many
 SELECT event_hour, count(*) AS used FROM verification_review_signals
 WHERE user_id = $1 AND project_id = $2 AND event_hour = ANY(sqlc.arg(hours)::timestamptz[])
 GROUP BY event_hour;
-
--- name: SaveReviewSignal :exec
-INSERT INTO verification_review_signals (user_id, install_id, project_id, seq, event_hour, label, model, metadata)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
 
 -- name: CurrentReviewPlan :one
 SELECT through_seq, sequences FROM verification_review_plans
@@ -140,35 +134,20 @@ WHERE user_id = $1 AND install_id = $2 AND project_id = $3;
 
 -- name: CreateReviewPlan :exec
 INSERT INTO verification_review_plans (user_id, install_id, project_id, through_seq, sequences)
-VALUES ($1, $2, $3, $4, $5);
+VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING;
 
--- name: DropReviewPlan :exec
-DELETE FROM verification_review_plans WHERE user_id = $1 AND install_id = $2 AND project_id = $3;
+-- name: ClaimReviewPlan :execrows
+DELETE FROM verification_review_plans
+WHERE user_id = $1 AND install_id = $2 AND project_id = $3 AND through_seq = $4;
 
--- name: ReviewCandidates :many
-SELECT e.seq, e.ts FROM events e JOIN installs i ON e.install_id = i.id
+-- name: ReviewPromptEvents :many
+SELECT e.seq, e.ts, e.session_id, e.data FROM events e JOIN installs i ON e.install_id = i.id
 WHERE i.user_id = $1 AND e.install_id = $2 AND e.project_id = $3 AND e.kind = 'prompt_sent'
-AND e.seq > sqlc.arg(after_seq) AND e.hash IS NOT NULL
-ORDER BY e.seq LIMIT 100;
+AND e.hash IS NOT NULL AND e.seq = ANY(sqlc.arg(sequences)::bigint[]);
 
--- name: ReviewToolActivity :one
-SELECT count(*) FILTER (WHERE e.data->>'tool' = 'shell') AS shells,
-       count(*) FILTER (WHERE e.data->>'tool' = 'edit') AS edits
-FROM events e WHERE e.install_id = $1 AND e.project_id = $2 AND e.session_id = $3
-AND e.kind = 'tool_call' AND e.ts >= sqlc.arg(hour_start) AND e.ts < sqlc.arg(hour_end);
-
--- name: ReviewQuotaEvents :many
-SELECT e.install_id, e.seq, e.ts, e.kind, e.session_id, e.project_id, e.data,
-       e.seq <= coalesce(a.last_seq, 0) AS already_reviewed
-FROM events e JOIN installs i ON i.id = e.install_id
-LEFT JOIN verification_analysis a
-  ON a.user_id = i.user_id AND a.install_id = e.install_id AND a.project_id = e.project_id
-WHERE i.user_id = sqlc.arg(user_id)
-  AND e.ts < sqlc.arg(until_ts)
-  AND (e.seq <= coalesce(a.last_seq, 0) OR
-       (e.install_id = sqlc.arg(install_id) AND e.project_id = sqlc.arg(project_id)
-        AND e.seq <= sqlc.arg(through_seq)))
-ORDER BY e.ts, e.install_id, e.seq;
+-- name: SaveReviewSignal :exec
+INSERT INTO verification_review_signals (user_id, install_id, project_id, seq, event_hour, label, model)
+VALUES ($1, $2, $3, $4, $5, $6, $7);
 
 -- name: ReviewInstalls :many
 SELECT DISTINCT ON (e.install_id) e.install_id, e.seq, e.hash
@@ -177,18 +156,15 @@ WHERE i.user_id = $1 AND e.project_id = $2 AND e.kind = 'prompt_sent' AND e.hash
 ORDER BY e.install_id, e.seq DESC;
 
 -- name: ReviewProjects :many
-SELECT a.user_id, u.name, a.project_id, max(a.analyzed_at) AS analyzed_at,
-       sum(a.unavailable)::bigint AS unavailable
+SELECT a.user_id, u.name, a.project_id, max(a.analyzed_at)::timestamptz AS analyzed_at
 FROM verification_analysis a JOIN users u ON u.id = a.user_id
 GROUP BY a.user_id, u.name, a.project_id
 ORDER BY max(a.analyzed_at) DESC, a.user_id, a.project_id;
 
 -- name: ReviewProjectScopes :many
-SELECT install_id, last_seq, unavailable FROM verification_analysis
-WHERE user_id = $1 AND project_id = $2 ORDER BY install_id;
+SELECT a.install_id, a.last_seq, u.name FROM verification_analysis a JOIN users u ON u.id = a.user_id
+WHERE a.user_id = $1 AND a.project_id = $2;
 
--- name: ProjectReviewSignals :many
-SELECT r.install_id, r.seq, r.label, r.model, r.metadata
-FROM verification_review_signals r JOIN events e ON e.install_id = r.install_id AND e.seq = r.seq
-WHERE r.user_id = $1 AND r.project_id = $2
-  AND e.ts >= sqlc.arg(from_ts) AND e.ts < sqlc.arg(to_ts);
+-- name: ReviewLabelCounts :many
+SELECT label, count(*) AS n FROM verification_review_signals
+WHERE user_id = $1 AND project_id = $2 GROUP BY label;

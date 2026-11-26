@@ -10,7 +10,7 @@ import (
 )
 
 const VerifyBodyLimit = 8 << 20
-const MaxReviewPrompts = 10
+const MaxReviewPrompts = 50
 const MaxReviewPromptBytes = 128 << 10
 
 type ReviewPlan struct {
@@ -20,7 +20,7 @@ type ReviewPlan struct {
 
 type ReviewResult struct {
 	AnalyzedSeq int64 `json:"analyzed_seq"`
-	Unavailable int64 `json:"unavailable,omitempty"`
+	Unavailable int   `json:"unavailable,omitempty"`
 	Classified  int   `json:"classified,omitempty"`
 }
 
@@ -37,7 +37,7 @@ type PromptBatch struct {
 	Prompts    []Prompt `json:"prompts"`
 }
 
-// get which prompts to send to the server (we are not sending everything as that would use too much tokens)
+// which prompts the server wants, a small sample to keep model usage low
 func (c *Client) ReviewPlan(ctx context.Context, project, install string) (ReviewPlan, error) {
 	query := url.Values{"project": {project}, "install": {install}}
 	var result ReviewPlan

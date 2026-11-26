@@ -2,7 +2,9 @@ package cli
 
 import (
 	"bufio"
+	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -68,118 +70,111 @@ func verifyProject(cmd *cobra.Command, project string) error {
 	if cfg.APIKey == "" {
 		return errors.New("not signed in, run sablier login first")
 	}
-	client := api.New(cfg.APIURL, cfg.APIKey)
-	installs, err := client.ReviewInstalls(ctx, project)
-	if err != nil {
-		return err
-	}
 	notice := cmd.ErrOrStderr()
 	fmt.Fprintf(notice, "%d cached %s • %d total %s\n\n", summary.Cached, Noun(summary.Cached, "prompt", "prompts"), summary.Total, Noun(summary.Total, "prompt", "prompts"))
-	fmt.Fprintf(notice, "sablier will send a subset of your prompts in clear text and their hashes to %s. The server will check and analyze the prompt with a decision model before deleting everything.\n\n[y/N] ", cfg.APIURL)
+	fmt.Fprintf(notice, "sablier will send a sample of your prompts in clear text to %s. The server checks them against their synced hashes, labels them with a decision model and keeps only the labels.\n\n[y/N] ", cfg.APIURL)
 	answer, err := bufio.NewReader(cmd.InOrStdin()).ReadString('\n')
 	if err != nil && !errors.Is(err, io.EOF) {
 		return err
 	}
-	switch strings.ToLower(strings.TrimSpace(answer)) {
-	case "y", "yes":
-	default:
+	if a := strings.ToLower(strings.TrimSpace(answer)); a != "y" && a != "yes" {
 		fmt.Fprintln(out, "cancelled")
 		return nil
 	}
 
-	synced, err := upload(ctx, s, client, notice)
-	if err != nil {
+	client := api.New(cfg.APIURL, cfg.APIKey)
+	if _, err := upload(ctx, s, client, notice); err != nil {
 		return err
 	}
-	if synced.Accepted+synced.Duplicates > 0 {
-		installs, err = client.ReviewInstalls(ctx, project)
-		if err != nil {
-			return err
-		}
-	}
 	stop := verificationProgress(notice)
-	classified, unavailable, err := sendProjectReview(cmd, s, client, project, installs)
+	total, err := sendProjectReview(ctx, s, client, project)
 	stop()
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "done • %d %s classified", classified, Noun(int64(classified), "prompt", "prompts"))
-	if unavailable > 0 {
-		fmt.Fprintf(out, " • %d %s unavailable or failed verification", unavailable, Noun(unavailable, "prompt", "prompts"))
+	fmt.Fprintf(out, "done • %d %s classified", total.Classified, Noun(int64(total.Classified), "prompt", "prompts"))
+	if total.Unavailable > 0 {
+		fmt.Fprintf(out, " • %d %s failed verification", total.Unavailable, Noun(int64(total.Unavailable), "prompt", "prompts"))
 	}
 	fmt.Fprintln(out)
 	return nil
 }
 
-func sendProjectReview(cmd *cobra.Command, s *store.Store, client *api.Client, project string, installs []api.ReviewInstall) (int, int64, error) {
-	ctx := cmd.Context()
-	var classified int
-	var unavailable int64
-	var matched bool
+// reviews every server install whose latest prompt matches this cache, a cache can span installs after a switch
+func sendProjectReview(ctx context.Context, s *store.Store, client *api.Client, project string) (api.ReviewResult, error) {
+	var total api.ReviewResult
+	installs, err := client.ReviewInstalls(ctx, project)
+	if err != nil {
+		return total, err
+	}
+	salt, err := s.Salt(ctx)
+	if err != nil {
+		return total, err
+	}
+	matched := false
 	for _, install := range installs {
 		ok, err := s.MatchesLocalReviewAnchor(ctx, project, install.Seq, install.Hash)
 		if err != nil {
-			return classified, unavailable, err
+			return total, err
 		}
 		if !ok {
 			continue
 		}
 		matched = true
-		count, gaps, err := sendReviewSamples(cmd, s, client, project, install.Install, install.Seq)
-		classified += count
-		unavailable += gaps
-		if err != nil {
-			return classified, unavailable, err
+		if err := reviewInstall(ctx, s, client, salt, project, install.Install, &total); err != nil {
+			return total, err
 		}
 	}
 	if !matched {
-		return 0, 0, errors.New("no synced prompt history matches this local cache")
+		return total, errors.New("no synced prompt history matches this local cache")
 	}
-	return classified, unavailable, nil
+	return total, nil
 }
 
-func sendReviewSamples(cmd *cobra.Command, s *store.Store, c *api.Client, project, install string, last int64) (int, int64, error) {
-	ctx := cmd.Context()
-	salt, err := s.Salt(ctx)
-	if err != nil {
-		return 0, 0, err
-	}
-	var classified int
-	var unavailable int64
+// sends server-chosen samples until the install has nothing left to review
+func reviewInstall(ctx context.Context, s *store.Store, client *api.Client, salt []byte, project, install string, total *api.ReviewResult) error {
 	for {
-		plan, err := c.ReviewPlan(ctx, project, install)
+		plan, err := client.ReviewPlan(ctx, project, install)
+		if err != nil || plan.ThroughSeq == 0 {
+			return err
+		}
+		b, err := reviewBatch(ctx, s, salt, project, install, plan)
 		if err != nil {
-			return classified, unavailable, err
+			return err
 		}
-		if plan.ThroughSeq == 0 {
-			return classified, unavailable, nil
-		}
-		if len(plan.Sequences) > api.MaxReviewPrompts {
-			return classified, unavailable, errors.New("server returned too many prompts in a review sample")
-		}
-		b := api.PromptBatch{ThroughSeq: plan.ThroughSeq, Project: project, Install: install}
-		for _, seq := range plan.Sequences {
-			row, err := s.LocalReviewPrompt(ctx, project, seq)
-			if err != nil && !errors.Is(err, sql.ErrNoRows) {
-				return classified, unavailable, err
-			}
-			p := api.Prompt{Seq: seq}
-			if err == nil && len(row.Text) <= api.MaxReviewPromptBytes {
-				p.Text = row.Text
-				p.Key = prompt.Key(salt, row.SessionID, time.UnixMilli(row.Ts))
-			}
-			b.Prompts = append(b.Prompts, p)
-		}
-		result, err := c.SendPrompts(ctx, b)
+		result, err := client.SendPrompts(ctx, b)
 		if err != nil {
-			return classified, unavailable, err
+			return err
 		}
-		classified += result.Classified
-		unavailable += result.Unavailable
-		if result.AnalyzedSeq >= last {
-			return classified, unavailable, nil
-		}
+		total.Classified += result.Classified
+		total.Unavailable += result.Unavailable
 	}
+}
+
+// prompts missing locally, too long or past the request budget are sent without text, the server counts them as unavailable
+func reviewBatch(ctx context.Context, s *store.Store, salt []byte, project, install string, plan api.ReviewPlan) (api.PromptBatch, error) {
+	b := api.PromptBatch{ThroughSeq: plan.ThroughSeq, Project: project, Install: install}
+	budget := api.VerifyBodyLimit - 64<<10
+	if len(plan.Sequences) > api.MaxReviewPrompts {
+		return b, errors.New("server asked for too many prompts")
+	}
+	for _, seq := range plan.Sequences {
+		p := api.Prompt{Seq: seq}
+		row, err := s.LocalReviewPrompt(ctx, project, seq)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return b, err
+		}
+		if err == nil && len(row.Text) <= api.MaxReviewPromptBytes {
+			// escaping can grow text a lot, so measure the encoded size
+			encoded, _ := json.Marshal(row.Text)
+			if len(encoded) <= budget {
+				budget -= len(encoded)
+				p.Text, p.Key = row.Text, prompt.Key(salt, row.SessionID, time.UnixMilli(row.Ts))
+			}
+		}
+		b.Prompts = append(b.Prompts, p)
+	}
+	return b, nil
 }
 
 func verificationProgress(out io.Writer) func() {

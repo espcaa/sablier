@@ -7,6 +7,8 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"io"
+	"log"
 	"math/rand/v2"
 	"net/http"
 	"slices"
@@ -17,334 +19,70 @@ import (
 	"github.com/espcaa/sablier/internal/event"
 	"github.com/espcaa/sablier/internal/prompt"
 	"github.com/espcaa/sablier/internal/server/db/sqlc"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+// lifetime cap on sampled prompts per user, project and active utc hour, so one busy hour can't fill the sample
 const reviewPerHour = 10
-const monthlyReviewLimit = 300 * time.Hour
 
-var errReviewBudget = errors.New("verification exceeds the 300-hour limit for a UTC month")
+const labelUnavailable = "unavailable"
 
-var errReviewProvider = errors.New("verifying analysis unavailable")
 var errReviewPlan = errors.New("review sample changed, rerun verify to resume")
 
 func reviewHour(t time.Time) pgtype.Timestamptz {
 	return pgtype.Timestamptz{Time: t.UTC().Truncate(time.Hour), Valid: true}
 }
 
-func lockReview(ctx context.Context, q *sqlc.Queries, user string) error {
-	return q.LockAccountAnalysis(ctx, "review:"+user)
+func verificationScope(project, install string) (pgtype.UUID, bool) {
+	id, err := uuid.Parse(install)
+	return pgtype.UUID{Bytes: id, Valid: err == nil}, err == nil && validProjectID.MatchString(project)
 }
 
 func (s *Server) reviewPlan(w http.ResponseWriter, r *http.Request) {
-	if s.cfg.DecisionAPIKey == "" {
-		writeError(w, http.StatusServiceUnavailable, "verification model is not configured")
-		return
-	}
 	project := r.URL.Query().Get("project")
 	install, ok := verificationScope(project, r.URL.Query().Get("install"))
 	if !ok {
 		writeError(w, http.StatusBadRequest, "invalid project or install")
 		return
 	}
-	w.Header().Set("Cache-Control", "no-store")
-	plan, err := s.prepareReview(r.Context(), apiUser(r).ID, install, project)
-	if errors.Is(err, errReviewBudget) {
-		writeError(w, http.StatusTooManyRequests, err.Error())
-		return
-	}
+	plan, err := s.prepareReview(r.Context(), sqlc.CurrentReviewPlanParams{UserID: apiUser(r).ID, InstallID: install, ProjectID: project})
 	if err != nil {
+		log.Printf("prepare review: %v", err)
 		writeError(w, http.StatusInternalServerError, "could not prepare review sample")
 		return
 	}
+	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, plan)
 }
 
-func (s *Server) prepareReview(ctx context.Context, user string, install pgtype.UUID, project string) (api.ReviewPlan, error) {
-	var plan api.ReviewPlan
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return plan, err
+func (s *Server) receivePrompts(w http.ResponseWriter, r *http.Request) {
+	var b api.PromptBatch
+	d := json.NewDecoder(http.MaxBytesReader(w, r.Body, api.VerifyBodyLimit))
+	if err := d.Decode(&b); err != nil || d.Decode(new(json.RawMessage)) != io.EOF {
+		writeError(w, http.StatusBadRequest, "invalid prompt batch")
+		return
 	}
-	defer tx.Rollback(ctx)
-	q := s.q.WithTx(tx)
-	if err := lockReview(ctx, q, user); err != nil {
-		return plan, err
+	install, ok := verificationScope(b.Project, b.Install)
+	if !ok || b.ThroughSeq <= 0 || len(b.Prompts) > api.MaxReviewPrompts {
+		writeError(w, http.StatusBadRequest, "expected a server-selected review sample, update sablier if needed")
+		return
 	}
-	current, err := q.CurrentReviewPlan(ctx, sqlc.CurrentReviewPlanParams{UserID: user, InstallID: install, ProjectID: project})
-	if err == nil {
-		if err := checkReviewQuota(ctx, q, user, install, project, current.ThroughSeq, time.Now()); err != nil {
-			return plan, err
-		}
-		return api.ReviewPlan{ThroughSeq: current.ThroughSeq, Sequences: current.Sequences}, nil
+	scope := sqlc.CurrentReviewPlanParams{UserID: apiUser(r).ID, InstallID: install, ProjectID: b.Project}
+	result, err := s.analyzePrompts(r.Context(), scope, b)
+	switch {
+	case errors.Is(err, errReviewPlan):
+		writeError(w, http.StatusConflict, err.Error())
+	case err != nil:
+		log.Printf("analyze prompts: %v", err)
+		writeError(w, http.StatusBadGateway, "verification failed, rerun verify to retry")
+	default:
+		writeJSON(w, http.StatusOK, result)
 	}
-	if !errors.Is(err, pgx.ErrNoRows) {
-		return plan, err
-	}
-	after, err := q.AnalysisCheckpoint(ctx, sqlc.AnalysisCheckpointParams{UserID: user, InstallID: install, ProjectID: project})
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return plan, err
-	}
-	rows, err := q.ReviewCandidates(ctx, sqlc.ReviewCandidatesParams{UserID: user, InstallID: install, ProjectID: project, AfterSeq: after})
-	if err != nil || len(rows) == 0 {
-		return plan, err
-	}
-	plan.ThroughSeq = rows[len(rows)-1].Seq
-	if err := checkReviewQuota(ctx, q, user, install, project, plan.ThroughSeq, time.Now()); err != nil {
-		return plan, err
-	}
-	plan.Sequences = []int64{}
-	hours := make([]pgtype.Timestamptz, 0, len(rows))
-	for _, row := range rows {
-		hours = append(hours, reviewHour(row.Ts.Time))
-	}
-	used, err := reviewCounts(ctx, q, user, project, hours)
-	if err != nil {
-		return plan, err
-	}
-	rand.Shuffle(len(rows), func(i, j int) { rows[i], rows[j] = rows[j], rows[i] })
-	for _, row := range rows {
-		hour := reviewHour(row.Ts.Time).Time
-		if used[hour] >= reviewPerHour {
-			continue
-		}
-		plan.Sequences = append(plan.Sequences, row.Seq)
-		used[hour]++
-		if len(plan.Sequences) == api.MaxReviewPrompts {
-			break
-		}
-	}
-	slices.Sort(plan.Sequences)
-	err = q.CreateReviewPlan(ctx, sqlc.CreateReviewPlanParams{UserID: user, InstallID: install, ProjectID: project, ThroughSeq: plan.ThroughSeq, Sequences: plan.Sequences})
-	if err != nil {
-		return plan, err
-	}
-	return plan, tx.Commit(ctx)
-}
-
-func reviewCounts(ctx context.Context, q *sqlc.Queries, user, project string, hours []pgtype.Timestamptz) (map[time.Time]int64, error) {
-	rows, err := q.ReviewHourCounts(ctx, sqlc.ReviewHourCountsParams{UserID: user, ProjectID: project, Hours: hours})
-	if err != nil {
-		return nil, err
-	}
-	counts := make(map[time.Time]int64, len(rows))
-	for _, row := range rows {
-		counts[row.EventHour.Time.UTC()] = row.Used
-	}
-	return counts, nil
-}
-
-type reviewSource struct {
-	hour    time.Time
-	session string
-}
-
-type reviewMetadata struct {
-	Excerpt                      bool  `json:"excerpt"`
-	PromptBytes                  int   `json:"prompt_bytes"`
-	ComposeMs                    int64 `json:"compose_ms"`
-	Pasted                       bool  `json:"pasted"`
-	ApprovalLike                 bool  `json:"approval_like"`
-	RepeatedInSample             bool  `json:"repeated_in_sample"`
-	ShellCalls                   int64 `json:"shell_calls"`
-	EditCalls                    int64 `json:"edit_calls"`
-	IterationWithoutToolActivity bool  `json:"iteration_without_tool_activity"`
-}
-
-type reviewEvidence struct {
-	row   sqlc.SaveReviewSignalParams
-	meta  reviewMetadata
-	group string
-}
-
-func (s *Server) analyzePrompts(ctx context.Context, user string, install pgtype.UUID, batch api.PromptBatch) (api.ReviewResult, error) {
-	ctx, cancel := context.WithTimeout(ctx, 12*time.Second)
-	defer cancel()
-	var result api.ReviewResult
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return result, err
-	}
-	defer tx.Rollback(context.Background())
-	q := s.q.WithTx(tx)
-	if err := lockReview(ctx, q, user); err != nil {
-		return result, err
-	}
-
-	scope := sqlc.AnalysisCheckpointParams{UserID: user, InstallID: install, ProjectID: batch.Project}
-	after, err := q.AnalysisCheckpoint(ctx, scope)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return result, err
-	}
-	if batch.ThroughSeq <= after {
-		result.AnalyzedSeq = after
-		return result, nil
-	}
-	plan, err := q.CurrentReviewPlan(ctx, sqlc.CurrentReviewPlanParams(scope))
-	if errors.Is(err, pgx.ErrNoRows) {
-		return result, errReviewPlan
-	}
-	if err != nil {
-		return result, err
-	}
-	if plan.ThroughSeq != batch.ThroughSeq || len(plan.Sequences) != len(batch.Prompts) {
-		return result, errReviewPlan
-	}
-	for i, p := range batch.Prompts {
-		if p.Seq != plan.Sequences[i] {
-			return result, errReviewPlan
-		}
-	}
-	if err := checkReviewQuota(ctx, q, user, install, batch.Project, plan.ThroughSeq, time.Now()); err != nil {
-		return result, err
-	}
-	evidence, groups, unavailable, err := buildReview(ctx, q, user, install, batch)
-	if err != nil {
-		return result, err
-	}
-	if len(evidence) > 0 {
-		labels, model, err := classifyReview(ctx, s.cfg.DecisionAPIKey, groups, s.cfg.DecisionAPIURL)
-		if err != nil {
-			return result, errReviewProvider
-		}
-		for i := range evidence {
-			evidence[i].row.Label = labels[evidence[i].group]
-			evidence[i].row.Model = model
-			evidence[i].meta.IterationWithoutToolActivity = evidence[i].row.Label == "iteration" && evidence[i].meta.ShellCalls == 0 && evidence[i].meta.EditCalls == 0
-		}
-	}
-	if err := q.AdvanceAnalysis(ctx, sqlc.AdvanceAnalysisParams{UserID: user, InstallID: install, ProjectID: batch.Project, LastSeq: plan.ThroughSeq, Unavailable: unavailable}); err != nil {
-		return result, err
-	}
-	for _, e := range evidence {
-		metadata, err := json.Marshal(e.meta)
-		if err != nil {
-			return result, err
-		}
-		e.row.Metadata = metadata
-		if err := q.SaveReviewSignal(ctx, e.row); err != nil {
-			return result, err
-		}
-	}
-	if err := q.DropReviewPlan(ctx, sqlc.DropReviewPlanParams(scope)); err != nil {
-		return result, err
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return result, err
-	}
-	result.AnalyzedSeq, result.Classified, result.Unavailable = plan.ThroughSeq, len(evidence), unavailable
-	return result, nil
-}
-
-func buildReview(ctx context.Context, q *sqlc.Queries, user string, install pgtype.UUID, batch api.PromptBatch) ([]reviewEvidence, map[string]*reviewGroup, int64, error) {
-	if len(batch.Prompts) == 0 {
-		return nil, nil, 0, nil
-	}
-	sequences := make([]int64, 0, len(batch.Prompts))
-	repeats := map[string]int{}
-	for _, p := range batch.Prompts {
-		sequences = append(sequences, p.Seq)
-		repeats[prompt.Normalize(p.Text)]++
-	}
-	events, err := q.ReviewPromptEvents(ctx, sqlc.ReviewPromptEventsParams{UserID: user, InstallID: install, ProjectID: batch.Project, Sequences: sequences})
-	if err != nil {
-		return nil, nil, 0, err
-	}
-	sources := make(map[int64]sqlc.ReviewPromptEventsRow, len(events))
-	hours := make([]pgtype.Timestamptz, 0, len(events))
-	for _, e := range events {
-		sources[e.Seq] = e
-		hours = append(hours, reviewHour(e.Ts.Time))
-	}
-	used, err := reviewCounts(ctx, q, user, batch.Project, hours)
-	if err != nil {
-		return nil, nil, 0, err
-	}
-	groups := map[string]*reviewGroup{}
-	groupIDs := map[reviewSource]string{}
-	activity := map[reviewSource]sqlc.ReviewToolActivityRow{}
-	var evidence []reviewEvidence
-	var unavailable int64
-	var unknownSource bool
-	incomplete := map[reviewSource]bool{}
-	verified := map[int64]event.PromptSentData{}
-	for _, p := range batch.Prompts {
-		e, ok := sources[p.Seq]
-		if !ok {
-			unavailable++
-			unknownSource = true
-			continue
-		}
-		var data event.PromptSentData
-		if !e.Hash.Valid || e.Hash.String == "" || p.Text == "" || len(p.Text) > api.MaxReviewPromptBytes || len(p.Key) != 32 ||
-			json.Unmarshal(e.Data, &data) != nil || !hmac.Equal([]byte(data.Hash), []byte(prompt.Hash(p.Key, p.Text))) {
-			unavailable++
-			incomplete[reviewSource{reviewHour(e.Ts.Time).Time, e.SessionID}] = true
-			continue
-		}
-		verified[p.Seq] = data
-	}
-	if unknownSource {
-		// the missing event could belong to any group in this sample
-		return nil, nil, unavailable, nil
-	}
-	for _, p := range batch.Prompts {
-		data, ok := verified[p.Seq]
-		if !ok {
-			continue
-		}
-		e := sources[p.Seq]
-		hour := reviewHour(e.Ts.Time)
-		source := reviewSource{hour.Time, e.SessionID}
-		if incomplete[source] {
-			continue
-		}
-		if used[hour.Time] >= reviewPerHour {
-			continue
-		}
-		id, ok := groupIDs[source]
-		if !ok {
-			id = strconv.Itoa(len(groups) + 1)
-			groupIDs[source] = id
-			groups[id] = &reviewGroup{}
-			totals, err := q.ReviewToolActivity(ctx, sqlc.ReviewToolActivityParams{InstallID: install, ProjectID: batch.Project, SessionID: e.SessionID, HourStart: hour, HourEnd: pgtype.Timestamptz{Time: hour.Time.Add(time.Hour), Valid: true}})
-			if err != nil {
-				return nil, nil, 0, err
-			}
-			activity[source] = totals
-		}
-		excerpt, truncated := reviewExcerpt(p.Text, p.Key)
-		groups[id].Prompts = append(groups[id].Prompts, excerpt)
-		used[hour.Time]++
-		totals := activity[source]
-		evidence = append(evidence, reviewEvidence{
-			row:   sqlc.SaveReviewSignalParams{UserID: user, InstallID: install, ProjectID: batch.Project, Seq: p.Seq, EventHour: hour},
-			meta:  reviewMetadata{Excerpt: truncated, PromptBytes: len(p.Text), ComposeMs: data.ComposeMs, Pasted: data.Pasted, ApprovalLike: data.ApprovalLike, RepeatedInSample: repeats[prompt.Normalize(p.Text)] > 1, ShellCalls: totals.Shells, EditCalls: totals.Edits},
-			group: id,
-		})
-	}
-	return evidence, groups, unavailable, nil
-}
-
-// derive a stable random window so provider retries see the same evidence.
-func reviewExcerpt(text string, key []byte) (string, bool) {
-	const fullTextLimit = 4 << 10
-	const excerptRunes = 500
-	if len(text) <= fullTextLimit {
-		return text, false
-	}
-	runes := []rune(text)
-	digest := sha256.Sum256(key)
-	start := binary.BigEndian.Uint64(digest[:8]) % uint64(len(runes)-excerptRunes+1)
-	return string(runes[int(start) : int(start)+excerptRunes]), true
 }
 
 func (s *Server) reviewInstalls(w http.ResponseWriter, r *http.Request) {
-	if s.cfg.DecisionAPIKey == "" {
-		writeError(w, http.StatusServiceUnavailable, "verification model is not configured")
-		return
-	}
 	project := r.URL.Query().Get("project")
 	if !validProjectID.MatchString(project) {
 		writeError(w, http.StatusBadRequest, "invalid project")
@@ -355,10 +93,195 @@ func (s *Server) reviewInstalls(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "could not load review installs")
 		return
 	}
-	result := make([]api.ReviewInstall, 0, len(rows))
-	for _, row := range rows {
-		result = append(result, api.ReviewInstall{Install: row.InstallID.String(), Seq: row.Seq, Hash: row.Hash.String})
+	result := make([]api.ReviewInstall, len(rows))
+	for i, row := range rows {
+		result[i] = api.ReviewInstall{Install: row.InstallID.String(), Seq: row.Seq, Hash: row.Hash.String}
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, result)
+}
+
+// returns the open plan, or samples up to 50 prompts from the next 500 unreviewed ones (10%)
+func (s *Server) prepareReview(ctx context.Context, scope sqlc.CurrentReviewPlanParams) (api.ReviewPlan, error) {
+	current, err := s.q.CurrentReviewPlan(ctx, scope)
+	if err == nil {
+		return api.ReviewPlan{ThroughSeq: current.ThroughSeq, Sequences: current.Sequences}, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return api.ReviewPlan{}, err
+	}
+	after, err := s.checkpoint(ctx, scope)
+	if err != nil {
+		return api.ReviewPlan{}, err
+	}
+	rows, err := s.q.ReviewCandidates(ctx, sqlc.ReviewCandidatesParams{UserID: scope.UserID, InstallID: scope.InstallID, ProjectID: scope.ProjectID, AfterSeq: after})
+	if err != nil || len(rows) == 0 {
+		return api.ReviewPlan{}, err
+	}
+	hours := make([]pgtype.Timestamptz, len(rows))
+	for i, row := range rows {
+		hours[i] = reviewHour(row.Ts.Time)
+	}
+	counts, err := s.q.ReviewHourCounts(ctx, sqlc.ReviewHourCountsParams{UserID: scope.UserID, ProjectID: scope.ProjectID, Hours: hours})
+	if err != nil {
+		return api.ReviewPlan{}, err
+	}
+	used := map[time.Time]int64{}
+	for _, c := range counts {
+		used[c.EventHour.Time.UTC()] = c.Used
+	}
+	sequences := []int64{}
+	for _, i := range rand.Perm(len(rows)) {
+		hour := hours[i].Time
+		if used[hour] >= reviewPerHour {
+			continue
+		}
+		used[hour]++
+		if sequences = append(sequences, rows[i].Seq); len(sequences) == api.MaxReviewPrompts {
+			break
+		}
+	}
+	slices.Sort(sequences)
+	err = s.q.CreateReviewPlan(ctx, sqlc.CreateReviewPlanParams{UserID: scope.UserID, InstallID: scope.InstallID, ProjectID: scope.ProjectID, ThroughSeq: rows[len(rows)-1].Seq, Sequences: sequences})
+	if err != nil {
+		return api.ReviewPlan{}, err
+	}
+	// a concurrent call may have created the plan first
+	return s.prepareReview(ctx, scope)
+}
+
+func (s *Server) checkpoint(ctx context.Context, scope sqlc.CurrentReviewPlanParams) (int64, error) {
+	seq, err := s.q.AnalysisCheckpoint(ctx, sqlc.AnalysisCheckpointParams(scope))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, nil
+	}
+	return seq, err
+}
+
+func (s *Server) analyzePrompts(ctx context.Context, scope sqlc.CurrentReviewPlanParams, b api.PromptBatch) (api.ReviewResult, error) {
+	after, err := s.checkpoint(ctx, scope)
+	if err != nil || b.ThroughSeq <= after {
+		return api.ReviewResult{AnalyzedSeq: after}, err
+	}
+	plan, err := s.q.CurrentReviewPlan(ctx, scope)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return api.ReviewResult{}, errReviewPlan
+	}
+	if err != nil {
+		return api.ReviewResult{}, err
+	}
+	sent := make([]int64, len(b.Prompts))
+	for i, p := range b.Prompts {
+		sent[i] = p.Seq
+	}
+	if plan.ThroughSeq != b.ThroughSeq || !slices.Equal(plan.Sequences, sent) {
+		return api.ReviewResult{}, errReviewPlan
+	}
+	signals, err := s.classify(ctx, scope, b)
+	if err != nil {
+		return api.ReviewResult{}, err
+	}
+
+	// the model call happens outside the transaction, claiming the plan makes the save happen once
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return api.ReviewResult{}, err
+	}
+	defer tx.Rollback(context.Background())
+	q := s.q.WithTx(tx)
+	claimed, err := q.ClaimReviewPlan(ctx, sqlc.ClaimReviewPlanParams{UserID: scope.UserID, InstallID: scope.InstallID, ProjectID: scope.ProjectID, ThroughSeq: plan.ThroughSeq})
+	if err != nil {
+		return api.ReviewResult{}, err
+	}
+	if claimed == 0 {
+		after, err := s.checkpoint(ctx, scope)
+		return api.ReviewResult{AnalyzedSeq: after}, err
+	}
+	if err := q.AdvanceAnalysis(ctx, sqlc.AdvanceAnalysisParams{UserID: scope.UserID, InstallID: scope.InstallID, ProjectID: scope.ProjectID, LastSeq: plan.ThroughSeq}); err != nil {
+		return api.ReviewResult{}, err
+	}
+	result := api.ReviewResult{AnalyzedSeq: plan.ThroughSeq}
+	for _, row := range signals {
+		if err := q.SaveReviewSignal(ctx, row); err != nil {
+			return api.ReviewResult{}, err
+		}
+		if row.Label == labelUnavailable {
+			result.Unavailable++
+		} else {
+			result.Classified++
+		}
+	}
+	return result, tx.Commit(ctx)
+}
+
+// labels each sampled prompt, prompts whose text doesn't match the synced hash are unavailable
+func (s *Server) classify(ctx context.Context, scope sqlc.CurrentReviewPlanParams, b api.PromptBatch) ([]sqlc.SaveReviewSignalParams, error) {
+	sequences := make([]int64, len(b.Prompts))
+	for i, p := range b.Prompts {
+		sequences[i] = p.Seq
+	}
+	events, err := s.q.ReviewPromptEvents(ctx, sqlc.ReviewPromptEventsParams{UserID: scope.UserID, InstallID: scope.InstallID, ProjectID: scope.ProjectID, Sequences: sequences})
+	if err != nil {
+		return nil, err
+	}
+	byseq := make(map[int64]sqlc.ReviewPromptEventsRow, len(events))
+	for _, e := range events {
+		byseq[e.Seq] = e
+	}
+	type source struct {
+		hour    time.Time
+		session string
+	}
+	groups := map[string]*reviewGroup{}
+	groupIDs := map[source]string{}
+	var signals []sqlc.SaveReviewSignalParams
+	var signalGroups []string
+	for _, p := range b.Prompts {
+		e, ok := byseq[p.Seq]
+		if !ok {
+			continue
+		}
+		hour := reviewHour(e.Ts.Time)
+		signals = append(signals, sqlc.SaveReviewSignalParams{UserID: scope.UserID, InstallID: scope.InstallID, ProjectID: scope.ProjectID, Seq: p.Seq, EventHour: hour, Label: labelUnavailable})
+		var data event.PromptSentData
+		if p.Text == "" || len(p.Text) > api.MaxReviewPromptBytes || len(p.Key) != 32 ||
+			json.Unmarshal(e.Data, &data) != nil || !hmac.Equal([]byte(data.Hash), []byte(prompt.Hash(p.Key, p.Text))) {
+			signalGroups = append(signalGroups, "")
+			continue
+		}
+		src := source{hour.Time, e.SessionID}
+		id, ok := groupIDs[src]
+		if !ok {
+			id = strconv.Itoa(len(groups) + 1)
+			groupIDs[src] = id
+			groups[id] = &reviewGroup{}
+		}
+		groups[id].Prompts = append(groups[id].Prompts, reviewExcerpt(p.Text, p.Key))
+		signalGroups = append(signalGroups, id)
+	}
+	if len(groups) == 0 {
+		return signals, nil
+	}
+	labels, model, err := classifyReview(ctx, s.cfg.DecisionAPIKey, s.cfg.DecisionAPIURL, groups)
+	if err != nil {
+		return nil, err
+	}
+	for i, id := range signalGroups {
+		if id != "" {
+			signals[i].Label, signals[i].Model = labels[id], model
+		}
+	}
+	return signals, nil
+}
+
+// long prompts become a 500 rune window, derived from the key so retries see the same text
+func reviewExcerpt(text string, key []byte) string {
+	const fullTextLimit, excerptRunes = 4 << 10, 500
+	if len(text) <= fullTextLimit {
+		return text
+	}
+	runes := []rune(text)
+	digest := sha256.Sum256(key)
+	start := binary.BigEndian.Uint64(digest[:8]) % uint64(len(runes)-excerptRunes+1)
+	return string(runes[start : start+excerptRunes])
 }

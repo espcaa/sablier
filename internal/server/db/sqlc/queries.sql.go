@@ -49,18 +49,17 @@ func (q *Queries) AdminStats(ctx context.Context) (AdminStatsRow, error) {
 }
 
 const advanceAnalysis = `-- name: AdvanceAnalysis :exec
-INSERT INTO verification_analysis (user_id, install_id, project_id, last_seq, unavailable)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO verification_analysis (user_id, install_id, project_id, last_seq)
+VALUES ($1, $2, $3, $4)
 ON CONFLICT (user_id, install_id, project_id) DO UPDATE
-SET last_seq = excluded.last_seq, analyzed_at = now(), unavailable = verification_analysis.unavailable + excluded.unavailable
+SET last_seq = excluded.last_seq, analyzed_at = now()
 `
 
 type AdvanceAnalysisParams struct {
-	UserID      string
-	InstallID   pgtype.UUID
-	ProjectID   string
-	LastSeq     int64
-	Unavailable int64
+	UserID    string
+	InstallID pgtype.UUID
+	ProjectID string
+	LastSeq   int64
 }
 
 func (q *Queries) AdvanceAnalysis(ctx context.Context, arg AdvanceAnalysisParams) error {
@@ -69,7 +68,6 @@ func (q *Queries) AdvanceAnalysis(ctx context.Context, arg AdvanceAnalysisParams
 		arg.InstallID,
 		arg.ProjectID,
 		arg.LastSeq,
-		arg.Unavailable,
 	)
 	return err
 }
@@ -108,6 +106,31 @@ func (q *Queries) ClaimInstall(ctx context.Context, arg ClaimInstallParams) (pgt
 	var id pgtype.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const claimReviewPlan = `-- name: ClaimReviewPlan :execrows
+DELETE FROM verification_review_plans
+WHERE user_id = $1 AND install_id = $2 AND project_id = $3 AND through_seq = $4
+`
+
+type ClaimReviewPlanParams struct {
+	UserID     string
+	InstallID  pgtype.UUID
+	ProjectID  string
+	ThroughSeq int64
+}
+
+func (q *Queries) ClaimReviewPlan(ctx context.Context, arg ClaimReviewPlanParams) (int64, error) {
+	result, err := q.db.Exec(ctx, claimReviewPlan,
+		arg.UserID,
+		arg.InstallID,
+		arg.ProjectID,
+		arg.ThroughSeq,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const consumeDeviceLogin = `-- name: ConsumeDeviceLogin :exec
@@ -158,7 +181,7 @@ func (q *Queries) CreateDeviceLogin(ctx context.Context, arg CreateDeviceLoginPa
 
 const createReviewPlan = `-- name: CreateReviewPlan :exec
 INSERT INTO verification_review_plans (user_id, install_id, project_id, through_seq, sequences)
-VALUES ($1, $2, $3, $4, $5)
+VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING
 `
 
 type CreateReviewPlanParams struct {
@@ -285,21 +308,6 @@ func (q *Queries) DeviceCredentials(ctx context.Context, userID string) ([]Devic
 	return items, nil
 }
 
-const dropReviewPlan = `-- name: DropReviewPlan :exec
-DELETE FROM verification_review_plans WHERE user_id = $1 AND install_id = $2 AND project_id = $3
-`
-
-type DropReviewPlanParams struct {
-	UserID    string
-	InstallID pgtype.UUID
-	ProjectID string
-}
-
-func (q *Queries) DropReviewPlan(ctx context.Context, arg DropReviewPlanParams) error {
-	_, err := q.db.Exec(ctx, dropReviewPlan, arg.UserID, arg.InstallID, arg.ProjectID)
-	return err
-}
-
 const insertEvent = `-- name: InsertEvent :execrows
 INSERT INTO events (install_id, seq, ts, kind, session_id, project_id, harness, source, data, prev_hash, hash)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
@@ -358,15 +366,6 @@ func (q *Queries) InstallHead(ctx context.Context, id pgtype.UUID) (InstallHeadR
 	return i, err
 }
 
-const lockAccountAnalysis = `-- name: LockAccountAnalysis :exec
-SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))
-`
-
-func (q *Queries) LockAccountAnalysis(ctx context.Context, scope string) error {
-	_, err := q.db.Exec(ctx, lockAccountAnalysis, scope)
-	return err
-}
-
 const pendingDeviceLogin = `-- name: PendingDeviceLogin :one
 SELECT hostname FROM device_login_requests WHERE approval_hash = $1
 AND user_id IS NULL AND NOT denied AND expires_at > now()
@@ -396,64 +395,11 @@ func (q *Queries) PollDeviceLogin(ctx context.Context, pollHash []byte) (PollDev
 	return i, err
 }
 
-const projectReviewSignals = `-- name: ProjectReviewSignals :many
-SELECT r.install_id, r.seq, r.label, r.model, r.metadata
-FROM verification_review_signals r JOIN events e ON e.install_id = r.install_id AND e.seq = r.seq
-WHERE r.user_id = $1 AND r.project_id = $2
-  AND e.ts >= $3 AND e.ts < $4
-`
-
-type ProjectReviewSignalsParams struct {
-	UserID    string
-	ProjectID string
-	FromTs    pgtype.Timestamptz
-	ToTs      pgtype.Timestamptz
-}
-
-type ProjectReviewSignalsRow struct {
-	InstallID pgtype.UUID
-	Seq       int64
-	Label     string
-	Model     string
-	Metadata  []byte
-}
-
-func (q *Queries) ProjectReviewSignals(ctx context.Context, arg ProjectReviewSignalsParams) ([]ProjectReviewSignalsRow, error) {
-	rows, err := q.db.Query(ctx, projectReviewSignals,
-		arg.UserID,
-		arg.ProjectID,
-		arg.FromTs,
-		arg.ToTs,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ProjectReviewSignalsRow
-	for rows.Next() {
-		var i ProjectReviewSignalsRow
-		if err := rows.Scan(
-			&i.InstallID,
-			&i.Seq,
-			&i.Label,
-			&i.Model,
-			&i.Metadata,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const reviewCandidates = `-- name: ReviewCandidates :many
 SELECT e.seq, e.ts FROM events e JOIN installs i ON e.install_id = i.id
 WHERE i.user_id = $1 AND e.install_id = $2 AND e.project_id = $3 AND e.kind = 'prompt_sent'
 AND e.seq > $4 AND e.hash IS NOT NULL
-ORDER BY e.seq LIMIT 100
+ORDER BY e.seq LIMIT 500
 `
 
 type ReviewCandidatesParams struct {
@@ -568,9 +514,44 @@ func (q *Queries) ReviewInstalls(ctx context.Context, arg ReviewInstallsParams) 
 	return items, nil
 }
 
+const reviewLabelCounts = `-- name: ReviewLabelCounts :many
+SELECT label, count(*) AS n FROM verification_review_signals
+WHERE user_id = $1 AND project_id = $2 GROUP BY label
+`
+
+type ReviewLabelCountsParams struct {
+	UserID    string
+	ProjectID string
+}
+
+type ReviewLabelCountsRow struct {
+	Label string
+	N     int64
+}
+
+func (q *Queries) ReviewLabelCounts(ctx context.Context, arg ReviewLabelCountsParams) ([]ReviewLabelCountsRow, error) {
+	rows, err := q.db.Query(ctx, reviewLabelCounts, arg.UserID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ReviewLabelCountsRow
+	for rows.Next() {
+		var i ReviewLabelCountsRow
+		if err := rows.Scan(&i.Label, &i.N); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const reviewProjectScopes = `-- name: ReviewProjectScopes :many
-SELECT install_id, last_seq, unavailable FROM verification_analysis
-WHERE user_id = $1 AND project_id = $2 ORDER BY install_id
+SELECT a.install_id, a.last_seq, u.name FROM verification_analysis a JOIN users u ON u.id = a.user_id
+WHERE a.user_id = $1 AND a.project_id = $2
 `
 
 type ReviewProjectScopesParams struct {
@@ -579,9 +560,9 @@ type ReviewProjectScopesParams struct {
 }
 
 type ReviewProjectScopesRow struct {
-	InstallID   pgtype.UUID
-	LastSeq     int64
-	Unavailable int64
+	InstallID pgtype.UUID
+	LastSeq   int64
+	Name      string
 }
 
 func (q *Queries) ReviewProjectScopes(ctx context.Context, arg ReviewProjectScopesParams) ([]ReviewProjectScopesRow, error) {
@@ -593,7 +574,7 @@ func (q *Queries) ReviewProjectScopes(ctx context.Context, arg ReviewProjectScop
 	var items []ReviewProjectScopesRow
 	for rows.Next() {
 		var i ReviewProjectScopesRow
-		if err := rows.Scan(&i.InstallID, &i.LastSeq, &i.Unavailable); err != nil {
+		if err := rows.Scan(&i.InstallID, &i.LastSeq, &i.Name); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -605,19 +586,17 @@ func (q *Queries) ReviewProjectScopes(ctx context.Context, arg ReviewProjectScop
 }
 
 const reviewProjects = `-- name: ReviewProjects :many
-SELECT a.user_id, u.name, a.project_id, max(a.analyzed_at) AS analyzed_at,
-       sum(a.unavailable)::bigint AS unavailable
+SELECT a.user_id, u.name, a.project_id, max(a.analyzed_at)::timestamptz AS analyzed_at
 FROM verification_analysis a JOIN users u ON u.id = a.user_id
 GROUP BY a.user_id, u.name, a.project_id
 ORDER BY max(a.analyzed_at) DESC, a.user_id, a.project_id
 `
 
 type ReviewProjectsRow struct {
-	UserID      string
-	Name        string
-	ProjectID   string
-	AnalyzedAt  interface{}
-	Unavailable int64
+	UserID     string
+	Name       string
+	ProjectID  string
+	AnalyzedAt pgtype.Timestamptz
 }
 
 func (q *Queries) ReviewProjects(ctx context.Context) ([]ReviewProjectsRow, error) {
@@ -634,7 +613,6 @@ func (q *Queries) ReviewProjects(ctx context.Context) ([]ReviewProjectsRow, erro
 			&i.Name,
 			&i.ProjectID,
 			&i.AnalyzedAt,
-			&i.Unavailable,
 		); err != nil {
 			return nil, err
 		}
@@ -647,9 +625,9 @@ func (q *Queries) ReviewProjects(ctx context.Context) ([]ReviewProjectsRow, erro
 }
 
 const reviewPromptEvents = `-- name: ReviewPromptEvents :many
-SELECT e.seq, e.ts, e.session_id, e.data, e.hash FROM events e JOIN installs i ON e.install_id = i.id
+SELECT e.seq, e.ts, e.session_id, e.data FROM events e JOIN installs i ON e.install_id = i.id
 WHERE i.user_id = $1 AND e.install_id = $2 AND e.project_id = $3 AND e.kind = 'prompt_sent'
-AND e.seq = ANY($4::bigint[])
+AND e.hash IS NOT NULL AND e.seq = ANY($4::bigint[])
 `
 
 type ReviewPromptEventsParams struct {
@@ -664,7 +642,6 @@ type ReviewPromptEventsRow struct {
 	Ts        pgtype.Timestamptz
 	SessionID string
 	Data      []byte
-	Hash      pgtype.Text
 }
 
 func (q *Queries) ReviewPromptEvents(ctx context.Context, arg ReviewPromptEventsParams) ([]ReviewPromptEventsRow, error) {
@@ -686,7 +663,6 @@ func (q *Queries) ReviewPromptEvents(ctx context.Context, arg ReviewPromptEvents
 			&i.Ts,
 			&i.SessionID,
 			&i.Data,
-			&i.Hash,
 		); err != nil {
 			return nil, err
 		}
@@ -696,107 +672,6 @@ func (q *Queries) ReviewPromptEvents(ctx context.Context, arg ReviewPromptEvents
 		return nil, err
 	}
 	return items, nil
-}
-
-const reviewQuotaEvents = `-- name: ReviewQuotaEvents :many
-SELECT e.install_id, e.seq, e.ts, e.kind, e.session_id, e.project_id, e.data,
-       e.seq <= coalesce(a.last_seq, 0) AS already_reviewed
-FROM events e JOIN installs i ON i.id = e.install_id
-LEFT JOIN verification_analysis a
-  ON a.user_id = i.user_id AND a.install_id = e.install_id AND a.project_id = e.project_id
-WHERE i.user_id = $1
-  AND e.ts < $2
-  AND (e.seq <= coalesce(a.last_seq, 0) OR
-       (e.install_id = $3 AND e.project_id = $4
-        AND e.seq <= $5))
-ORDER BY e.ts, e.install_id, e.seq
-`
-
-type ReviewQuotaEventsParams struct {
-	UserID     string
-	UntilTs    pgtype.Timestamptz
-	InstallID  pgtype.UUID
-	ProjectID  string
-	ThroughSeq int64
-}
-
-type ReviewQuotaEventsRow struct {
-	InstallID       pgtype.UUID
-	Seq             int64
-	Ts              pgtype.Timestamptz
-	Kind            string
-	SessionID       string
-	ProjectID       string
-	Data            []byte
-	AlreadyReviewed bool
-}
-
-func (q *Queries) ReviewQuotaEvents(ctx context.Context, arg ReviewQuotaEventsParams) ([]ReviewQuotaEventsRow, error) {
-	rows, err := q.db.Query(ctx, reviewQuotaEvents,
-		arg.UserID,
-		arg.UntilTs,
-		arg.InstallID,
-		arg.ProjectID,
-		arg.ThroughSeq,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ReviewQuotaEventsRow
-	for rows.Next() {
-		var i ReviewQuotaEventsRow
-		if err := rows.Scan(
-			&i.InstallID,
-			&i.Seq,
-			&i.Ts,
-			&i.Kind,
-			&i.SessionID,
-			&i.ProjectID,
-			&i.Data,
-			&i.AlreadyReviewed,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const reviewToolActivity = `-- name: ReviewToolActivity :one
-SELECT count(*) FILTER (WHERE e.data->>'tool' = 'shell') AS shells,
-       count(*) FILTER (WHERE e.data->>'tool' = 'edit') AS edits
-FROM events e WHERE e.install_id = $1 AND e.project_id = $2 AND e.session_id = $3
-AND e.kind = 'tool_call' AND e.ts >= $4 AND e.ts < $5
-`
-
-type ReviewToolActivityParams struct {
-	InstallID pgtype.UUID
-	ProjectID string
-	SessionID string
-	HourStart pgtype.Timestamptz
-	HourEnd   pgtype.Timestamptz
-}
-
-type ReviewToolActivityRow struct {
-	Shells int64
-	Edits  int64
-}
-
-func (q *Queries) ReviewToolActivity(ctx context.Context, arg ReviewToolActivityParams) (ReviewToolActivityRow, error) {
-	row := q.db.QueryRow(ctx, reviewToolActivity,
-		arg.InstallID,
-		arg.ProjectID,
-		arg.SessionID,
-		arg.HourStart,
-		arg.HourEnd,
-	)
-	var i ReviewToolActivityRow
-	err := row.Scan(&i.Shells, &i.Edits)
-	return i, err
 }
 
 const revokeDeviceCredential = `-- name: RevokeDeviceCredential :exec
@@ -814,8 +689,8 @@ func (q *Queries) RevokeDeviceCredential(ctx context.Context, arg RevokeDeviceCr
 }
 
 const saveReviewSignal = `-- name: SaveReviewSignal :exec
-INSERT INTO verification_review_signals (user_id, install_id, project_id, seq, event_hour, label, model, metadata)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+INSERT INTO verification_review_signals (user_id, install_id, project_id, seq, event_hour, label, model)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 `
 
 type SaveReviewSignalParams struct {
@@ -826,7 +701,6 @@ type SaveReviewSignalParams struct {
 	EventHour pgtype.Timestamptz
 	Label     string
 	Model     string
-	Metadata  []byte
 }
 
 func (q *Queries) SaveReviewSignal(ctx context.Context, arg SaveReviewSignalParams) error {
@@ -838,7 +712,6 @@ func (q *Queries) SaveReviewSignal(ctx context.Context, arg SaveReviewSignalPara
 		arg.EventHour,
 		arg.Label,
 		arg.Model,
-		arg.Metadata,
 	)
 	return err
 }

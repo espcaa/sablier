@@ -28,8 +28,8 @@ func heatLevel(count int) string {
 }
 
 templ reviewHeatmap(days []ReviewHeatDay) {
-	@card("Heartbeat heatmap") {
-		<div class="heatmap-scroll" role="region" aria-label="Hourly heartbeat activity" tabindex="0">
+	@card("Activity heatmap (UTC)") {
+		<div class="heatmap-scroll" role="region" aria-label="Hourly event activity" tabindex="0">
 			<div class="heatmap">
 				<span></span>
 				for hour := range 24 {
@@ -47,7 +47,7 @@ templ reviewHeatmap(days []ReviewHeatDay) {
 				}
 			</div>
 		</div>
-		<div class="heatmap-legend" aria-label="Heartbeats per hour">
+		<div class="heatmap-legend" aria-label="Events per hour">
 			for i, label := range []string{"0", "1–5", "6–20", "21–60", "61+"} {
 				<span><i class="heatmap-cell" data-level={ strconv.Itoa(i) } aria-hidden="true"></i>{ label }</span>
 			}

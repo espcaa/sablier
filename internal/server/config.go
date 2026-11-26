@@ -53,5 +53,8 @@ func ConfigFromEnv() (Config, error) {
 	if c.DatabaseURL == "" {
 		return c, errors.New("DATABASE_URL is not set")
 	}
+	if c.DecisionAPIKey == "" || c.DecisionAPIURL == "" {
+		return c, errors.New("DECISION_API_KEY and DECISION_API_URL must be set")
+	}
 	return c, nil
 }

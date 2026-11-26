@@ -85,15 +85,18 @@ func TestVerifyResumesAfterLostAcknowledgment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// the second prompt's cached text no longer matches its synced hash
 	at := time.Now().Add(-time.Minute).Truncate(time.Millisecond)
-	key := prompt.Key(salt, "session", at)
-	e, err := event.New(event.PromptSent, at, event.PromptSentData{Hash: prompt.Hash(key, "synthetic")})
-	if err != nil {
-		t.Fatal(err)
-	}
-	e.ProjectID, e.Prompt, e.SessionID = "demo", "synthetic", "session"
-	if _, err := s.Append(t.Context(), e); err != nil {
-		t.Fatal(err)
+	for i, text := range []string{"synthetic", "tampered"} {
+		ts := at.Add(time.Duration(i) * time.Millisecond)
+		e, err := event.New(event.PromptSent, ts, event.PromptSentData{Hash: prompt.Hash(prompt.Key(salt, "session", ts), "synthetic")})
+		if err != nil {
+			t.Fatal(err)
+		}
+		e.ProjectID, e.Prompt, e.SessionID = "demo", text, "session"
+		if _, err := s.Append(t.Context(), e); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	run("no\n", "cancelled", false)
@@ -112,7 +115,11 @@ func TestVerifyResumesAfterLostAcknowledgment(t *testing.T) {
 	seq, err := q.AnalysisCheckpoint(t.Context(), sqlc.AnalysisCheckpointParams{
 		UserID: "account-a", InstallID: pgtype.UUID{Bytes: uuid.MustParse(install), Valid: true}, ProjectID: "demo",
 	})
-	if err != nil || seq != 1 {
+	if err != nil || seq != 2 {
 		t.Fatalf("missing checkpoint: %d, %v", seq, err)
+	}
+	labels, err := q.ReviewLabelCounts(t.Context(), sqlc.ReviewLabelCountsParams{UserID: "account-a", ProjectID: "demo"})
+	if err != nil || len(labels) != 2 {
+		t.Fatalf("expected one iteration and one unavailable label: %+v, %v", labels, err)
 	}
 }

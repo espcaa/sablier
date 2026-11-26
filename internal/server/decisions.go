@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"regexp"
@@ -23,7 +23,13 @@ type reviewGroup struct {
 	Prompts []string `json:"prompts"`
 }
 
-func classifyReview(ctx context.Context, key string, groups map[string]*reviewGroup, decisionEndpoint string) (map[string]string, string, error) {
+var jevHTTP = &http.Client{
+	Timeout:       20 * time.Second,
+	CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+}
+
+// returns one label per group and the model that answered
+func classifyReview(ctx context.Context, key, endpoint string, groups map[string]*reviewGroup) (map[string]string, string, error) {
 	type question struct {
 		Type         string            `json:"type"`
 		Instructions string            `json:"instructions"`
@@ -41,7 +47,7 @@ func classifyReview(ctx context.Context, key string, groups map[string]*reviewGr
 	if err != nil {
 		return nil, "", err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, decisionEndpoint, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		return nil, "", err
 	}
@@ -53,9 +59,8 @@ func classifyReview(ctx context.Context, key string, groups map[string]*reviewGr
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		return nil, "", errors.New("jev request failed")
+		return nil, "", fmt.Errorf("decision model returned %s", res.Status)
 	}
-
 	var response struct {
 		Model   string
 		Answers map[string]struct{ Type, Choice string }
@@ -64,20 +69,15 @@ func classifyReview(ctx context.Context, key string, groups map[string]*reviewGr
 		return nil, "", err
 	}
 	if !jevModelID.MatchString(response.Model) {
-		return nil, "", errors.New("invalid jev model")
+		return nil, "", fmt.Errorf("invalid decision model %q", response.Model)
 	}
 	labels := make(map[string]string, len(groups))
 	for id := range groups {
 		answer := response.Answers[id]
 		if _, ok := reviewChoices[answer.Choice]; !ok || answer.Type != "choice" {
-			return nil, "", errors.New("invalid jev answer")
+			return nil, "", fmt.Errorf("invalid answer for group %s", id)
 		}
 		labels[id] = answer.Choice
 	}
 	return labels, response.Model, nil
-}
-
-var jevHTTP = &http.Client{
-	Timeout:       8 * time.Second,
-	CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 }

@@ -63,4 +63,4 @@ The prompt `hash` is an hmac-sha256 of the prompt (lowercased, spaces squashed),
 
 Everything is in a sqlite database in your data folder (see [configuration](/docs/reference/configuration/)).
 
-That includes cached prompt text. If you udr `sablier verify`, the cli uploads a subset of your prompts, with their individual hashes.
+That includes cached prompt text. If you run `sablier verify`, the cli uploads a sample of your prompts. The server checks each one against its synced hash, labels it with a decision model and keeps only the label, never the text.

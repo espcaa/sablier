@@ -97,7 +97,7 @@ func Admin(me Me, stats sqlc.AdminStatsRow) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</div><style>\n\t\t\t.admin-title {\n\t\t\t\tfont-size: 1.6rem;\n\t\t\t\tfont-weight: 600;\n\t\t\t\tletter-spacing: -.01em;\n\t\t\t}\n\t\t\t.admin-stats {\n\t\t\t\tdisplay: grid;\n\t\t\t\tgrid-template-columns: repeat(auto-fit, minmax(min(12rem, 100%), 1fr));\n\t\t\t\tgap: .75rem;\n\t\t\t\tmax-width: 60rem;\n\t\t\t\tmargin-block: 1rem;\n\t\t\t}\n\t\t\t.admin-stats strong {\n\t\t\t\tfont-size: 2rem;\n\t\t\t\tfont-weight: 600;\n\t\t\t\tfont-variant-numeric: tabular-nums;\n\t\t\t\tline-height: 1;\n\t\t\t}\n\t\t\t.admin-note { color: var(--color-muted); font-size: .875rem; }\n\t\t</style>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</div><style>\n\t\t\t.admin-title {\n\t\t\t\tfont-size: 1.6rem;\n\t\t\t\tfont-weight: 600;\n\t\t\t\tletter-spacing: -.01em;\n\t\t\t}\n\t\t\t.admin-stats {\n\t\t\t\tdisplay: grid;\n\t\t\t\tgrid-template-columns: repeat(auto-fit, minmax(min(12rem, 100%), 1fr));\n\t\t\t\tgap: .75rem;\n\t\t\t\tmax-width: 60rem;\n\t\t\t\tmargin-block: 1rem;\n\t\t\t}\n\t\t\t.admin-stats strong {\n\t\t\t\tfont-size: 2rem;\n\t\t\t\tfont-weight: 600;\n\t\t\t\tfont-variant-numeric: tabular-nums;\n\t\t\t\tline-height: 1;\n\t\t\t}\n\t\t</style>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -147,7 +147,7 @@ func adminStat(title string, count int64) templ.Component {
 			var templ_7745c5c3_Var6 string
 			templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.FormatInt(count, 10))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/server/views/admin.templ`, Line: 48, Col: 40}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/server/views/admin.templ`, Line: 47, Col: 40}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 			if templ_7745c5c3_Err != nil {

@@ -9,12 +9,22 @@ import (
 )
 
 type ProjectReviewData struct {
-	Account, Project                                                                         string
-	TotalTracked, Credited, Observed, Focused, Mouse                                         time.Duration
-	Installs, EventCount, Early, Late, Offline, Unchained, Prompts, TotalPrompts, Classified int
-	Unavailable                                                                              int64
-	Heatmap                                                                                  []ReviewHeatDay
-	Jev                                                                                      map[string]int
+	Account, AccountName, Project                                                string
+	TotalTracked, Submitted, Observed, Focused, Mouse                            time.Duration
+	Installs, EventCount, Early, Late, Offline, Unchained, Prompts, TotalPrompts int
+	Labels                                                                       map[string]int // includes unavailable
+	Heatmap                                                                      []ReviewHeatDay
+}
+
+// prompts the decision model labeled
+func (r ProjectReviewData) Classified() int {
+	n := 0
+	for label, count := range r.Labels {
+		if label != "unavailable" {
+			n += count
+		}
+	}
+	return n
 }
 
 func reviewProjectLink(account, project string) templ.SafeURL {
@@ -44,6 +54,7 @@ templ ReviewIndex(me Me, projects []sqlc.ReviewProjectsRow) {
 					<div class="project">
 						<a class="review-project" href={ reviewProjectLink(project.UserID, project.ProjectID) }>
 							<strong>{ project.ProjectID }</strong>
+							<span>{ project.Name }</span>
 						</a>
 						@linkButton(quiet, reviewProjectLink(project.UserID, project.ProjectID), nil) {
 							Review
@@ -66,34 +77,35 @@ templ ProjectReview(me Me, r ProjectReviewData) {
 			<div class="review-heading">
 				<p class="review-credit" aria-label="Total tracked time"><strong>{ long(r.TotalTracked) }</strong></p>
 				<h1>{ r.Project }</h1>
+				<p>{ r.AccountName } · { r.Account }</p>
 			</div>
 			@card("Verification coverage") {
-				<p><strong>{ reviewShare(r.Credited, r.TotalTracked) }</strong> of tracked time covered by verification ({ long(r.Credited) } of { long(r.TotalTracked) })</p>
-				<p>Decision model analyzed { fmt.Sprintf("%d of %d tracked prompts", r.Classified, r.TotalPrompts) }.</p>
+				<p><strong>{ reviewShare(r.Submitted, r.TotalTracked) }</strong> of tracked time submitted for verification ({ long(r.Submitted) } of { long(r.TotalTracked) })</p>
+				<p>Decision model labeled { fmt.Sprintf("%d of %d tracked prompts", r.Classified(), r.TotalPrompts) }, { fmt.Sprint(r.Labels["unavailable"]) } sampled prompts failed verification.</p>
 			}
 			<div class="review-metrics" role="group" aria-label="Project metrics">
-				@reviewMetric("Heartbeats", fmt.Sprint(r.EventCount))
-				@reviewMetric("Good quality prompts", reviewShare(r.Jev["iteration"], r.Classified))
-				@reviewMetric("Scroll / click", reviewShare(r.Mouse, r.Credited))
+				@reviewMetric("Events", fmt.Sprint(r.EventCount))
+				@reviewMetric("Iteration prompts", reviewShare(r.Labels["iteration"], r.Classified()))
+				@reviewMetric("Scroll / click", reviewShare(r.Mouse, r.Submitted))
 			</div>
 			@reviewHeatmap(r.Heatmap)
 			<div class="review-breakdown">
 				@card("Time breakdown") {
 					<dl>
-						@reviewDetail("Focused time", reviewShare(r.Focused, r.Credited))
+						@reviewDetail("Focused", reviewShare(r.Focused, r.Submitted))
 						@reviewDetail("Recorded input", long(r.Observed))
-						@reviewDetail("Inferred time", long(max(0, r.Credited-r.Observed)))
+						@reviewDetail("Inferred time", long(max(0, r.Submitted-r.Observed)))
 					</dl>
 				}
 				@card("Sync and prompt coverage") {
 					<dl>
-						@reviewDetail("Prompts covered by verification", fmt.Sprintf("%d / %d", r.Prompts, r.TotalPrompts))
-						@reviewDetail("Prompts analyzed by the decision model", fmt.Sprintf("%d / %d", r.Classified, r.TotalPrompts))
-						@reviewDetail("Unavailable prompts", fmt.Sprint(r.Unavailable))
+						@reviewDetail("Prompts submitted for verification", fmt.Sprintf("%d / %d", r.Prompts, r.TotalPrompts))
+						@reviewDetail("Prompts labeled by the decision model", fmt.Sprintf("%d / %d", r.Classified(), r.TotalPrompts))
+						@reviewDetail("Sampled prompts that failed verification", fmt.Sprint(r.Labels["unavailable"]))
 						@reviewDetail("Late (10min to 24h)", fmt.Sprint(r.Late))
 						@reviewDetail("Backlog (over 24h)", fmt.Sprint(r.Offline))
-						@reviewDetail("Early heartbeats", fmt.Sprint(r.Early))
-						@reviewDetail("Unchained heartbeats", fmt.Sprint(r.Unchained))
+						@reviewDetail("Early events", fmt.Sprint(r.Early))
+						@reviewDetail("Unchained events", fmt.Sprint(r.Unchained))
 						@reviewDetail("Devices", fmt.Sprint(r.Installs))
 					</dl>
 				}
@@ -133,9 +145,7 @@ templ reviewStyles() {
 		.review-page h1 { font-size: 1.6rem; line-height: 1.2; }
 		.project { display: flex; flex-direction: row; justify-content: space-between; width: 100%;}
 		.review-page a { color: var(--color-accent); }
-		.review-project { border-top: 1px solid var(--color-border); padding-top: .65rem; }
-		.review-project { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .5rem; }
-		.review-muted { color: var(--color-muted); font-size: .875rem; }
+		.review-project { display: flex; flex-wrap: wrap; gap: .5rem; border-top: 1px solid var(--color-border); padding-top: .65rem; }
 		.review-metrics {
 			display: grid;
 			grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 10rem));

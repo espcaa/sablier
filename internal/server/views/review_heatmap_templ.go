@@ -65,7 +65,7 @@ func reviewHeatmap(days []ReviewHeatDay) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"heatmap-scroll\" role=\"region\" aria-label=\"Hourly heartbeat activity\" tabindex=\"0\"><div class=\"heatmap\"><span></span> ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"heatmap-scroll\" role=\"region\" aria-label=\"Hourly event activity\" tabindex=\"0\"><div class=\"heatmap\"><span></span> ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -154,7 +154,7 @@ func reviewHeatmap(days []ReviewHeatDay) templ.Component {
 					}
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</div></div><div class=\"heatmap-legend\" aria-label=\"Heartbeats per hour\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</div></div><div class=\"heatmap-legend\" aria-label=\"Events per hour\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -196,7 +196,7 @@ func reviewHeatmap(days []ReviewHeatDay) templ.Component {
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = card("Heartbeat heatmap").Render(templ.WithChildren(ctx, templ_7745c5c3_Var2), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = card("Activity heatmap (UTC)").Render(templ.WithChildren(ctx, templ_7745c5c3_Var2), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
