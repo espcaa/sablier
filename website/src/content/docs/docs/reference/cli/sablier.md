@@ -21,11 +21,13 @@ the time you actually spend working with it.
 
 * [sablier claude](../sablier_claude/)	 - run claude code through sablier
 * [sablier codex](../sablier_codex/)	 - run codex through sablier
+* [sablier list-projects](../sablier_list-projects/)	 - list projects on this machine
 * [sablier login](../sablier_login/)	 - sign in through your browser
 * [sablier opencode](../sablier_opencode/)	 - run opencode through sablier
 * [sablier status](../sablier_status/)	 - check the account, sync and each harness
 * [sablier sync](../sablier_sync/)	 - upload tracked events to the server
 * [sablier today](../sablier_today/)	 - time since midnight
-* [sablier update](../sablier_update/)	 - update sablier to the latest release
+* [sablier update](../sablier_update/)	 - update sablier to the latest release, or to a given one
+* [sablier verify](../sablier_verify/)	 - send new project prompts for verification
 * [sablier version](../sablier_version/)	 - print sablier's version
 

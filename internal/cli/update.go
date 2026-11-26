@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/espcaa/sablier/internal/update"
 	"github.com/espcaa/sablier/internal/version"
@@ -12,11 +13,11 @@ import (
 )
 
 func newUpdateCmd() *cobra.Command {
-	var to string
-	cmd := &cobra.Command{
-		Use:   "update",
-		Short: "update sablier to the latest release",
-		Args:  cobra.NoArgs,
+	return &cobra.Command{
+		Use:     "update [version]",
+		Short:   "update sablier to the latest release, or to a given one",
+		Example: "  sablier update\n  sablier update 0.2.0-alpha.4",
+		Args:    cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := cmd.OutOrStdout()
 			current := version.Version
@@ -29,8 +30,14 @@ func newUpdateCmd() *cobra.Command {
 			}
 
 			c := http.DefaultClient
-			tag := to
-			if tag == "" {
+			var tag string
+			if len(args) == 1 {
+				tag = "v" + strings.TrimPrefix(args[0], "v")
+				if tag == current {
+					fmt.Fprintf(out, "sablier %s is already installed\n", current)
+					return nil
+				}
+			} else {
 				if tag, err = update.Latest(cmd.Context(), c); err != nil {
 					return err
 				}
@@ -46,6 +53,9 @@ func newUpdateCmd() *cobra.Command {
 			}
 			fmt.Fprintf(out, "downloading sablier %s\n", tag)
 			bin, err := update.Download(cmd.Context(), c, base)
+			if err != nil && len(args) == 1 {
+				return fmt.Errorf("can't install %s, check that the release exists: %w", tag, err)
+			}
 			if err != nil {
 				return err
 			}
@@ -56,6 +66,4 @@ func newUpdateCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&to, "version", "", "install this release instead of the latest, like v0.1.0")
-	return cmd
 }

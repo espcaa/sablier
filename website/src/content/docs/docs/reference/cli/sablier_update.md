@@ -4,17 +4,23 @@ title: sablier update
 
 ## sablier update
 
-update sablier to the latest release
+update sablier to the latest release, or to a given one
 
 ```
-sablier update [flags]
+sablier update [version] [flags]
+```
+
+### Examples
+
+```
+  sablier update
+  sablier update 0.2.0-alpha.4
 ```
 
 ### Options
 
 ```
-  -h, --help             help for update
-      --version string   install this release instead of the latest, like v0.1.0
+  -h, --help   help for update
 ```
 
 ### SEE ALSO
