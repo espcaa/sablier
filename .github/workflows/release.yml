@@ -26,4 +26,8 @@ jobs:
       - name: publish
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --generate-notes
+        # alpha and beta tags are prereleases, so sablier update and install.sh skip them
+        run: |
+          pre=
+          case "$GITHUB_REF_NAME" in *-alpha*|*-beta*) pre=--prerelease ;; esac
+          gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --generate-notes $pre
