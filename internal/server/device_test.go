@@ -37,6 +37,9 @@ func TestDeviceLoginAndRevocation(t *testing.T) {
 	if status != http.StatusOK || !strings.Contains(body, login.Approval) || strings.Contains(body, login.PollToken) {
 		t.Fatalf("unexpected consent page, status %d", status)
 	}
+	if !strings.Contains(body, "work-laptop") {
+		t.Fatal("consent page does not show the requesting hostname")
+	}
 	browser.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	post := func(path string, values url.Values, origin string) *http.Response {
 		t.Helper()
