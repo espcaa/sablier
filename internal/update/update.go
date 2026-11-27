@@ -104,34 +104,98 @@ func Cleanup(exe string) {
 }
 
 func Newer(a, b string) bool {
-	pa, okA := parse(a)
-	pb, okB := parse(b)
+	va, okA := parse(a)
+	vb, okB := parse(b)
 	if !okA || !okB {
 		return false
 	}
-	for i := range pa {
-		if pa[i] != pb[i] {
-			return pa[i] > pb[i]
-		}
-	}
-	return false
+	return va.compare(vb) > 0
 }
 
-func parse(v string) ([3]int, bool) {
-	var out [3]int
-	v, _, _ = strings.Cut(strings.TrimPrefix(v, "v"), "-")
-	parts := strings.Split(v, ".")
+type semver struct {
+	nums [3]int
+	pre  []string
+}
+
+// parse reads a version like v1.2.3 or 1.2.3-alpha.4. Build metadata is ignored.
+func parse(v string) (semver, bool) {
+	var out semver
+	v = strings.TrimPrefix(v, "v")
+	v, _, _ = strings.Cut(v, "+")
+	core, pre, hasPre := strings.Cut(v, "-")
+	parts := strings.Split(core, ".")
 	if len(parts) != 3 {
 		return out, false
 	}
 	for i, p := range parts {
 		n, err := strconv.Atoi(p)
-		if err != nil {
+		if err != nil || n < 0 {
 			return out, false
 		}
-		out[i] = n
+		out.nums[i] = n
+	}
+	if hasPre {
+		if pre == "" {
+			return out, false
+		}
+		out.pre = strings.Split(pre, ".")
+		for _, id := range out.pre {
+			if id == "" {
+				return out, false
+			}
+		}
 	}
 	return out, true
+}
+
+// compare follows semver precedence: a release beats a prerelease, numeric
+// identifiers beat alphanumeric ones, and a longer prerelease beats its prefix.
+func (v semver) compare(o semver) int {
+	for i := range v.nums {
+		if v.nums[i] != o.nums[i] {
+			if v.nums[i] > o.nums[i] {
+				return 1
+			}
+			return -1
+		}
+	}
+	switch {
+	case len(v.pre) == 0 && len(o.pre) == 0:
+		return 0
+	case len(v.pre) == 0:
+		return 1
+	case len(o.pre) == 0:
+		return -1
+	}
+	for i := 0; i < min(len(v.pre), len(o.pre)); i++ {
+		a, b := v.pre[i], o.pre[i]
+		an, aErr := strconv.Atoi(a)
+		bn, bErr := strconv.Atoi(b)
+		switch {
+		case aErr == nil && bErr == nil:
+			if an != bn {
+				if an > bn {
+					return 1
+				}
+				return -1
+			}
+		case aErr == nil:
+			return -1
+		case bErr == nil:
+			return 1
+		default:
+			if a != b {
+				return strings.Compare(a, b)
+			}
+		}
+	}
+	switch {
+	case len(v.pre) > len(o.pre):
+		return 1
+	case len(v.pre) < len(o.pre):
+		return -1
+	}
+	return 0
 }
 
 func get(ctx context.Context, c *http.Client, url string) ([]byte, error) {
