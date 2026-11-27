@@ -3,6 +3,7 @@ package project
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -84,6 +85,19 @@ func TestFirstRemoteWithoutOrigin(t *testing.T) {
 	repo(t, dir, "[remote \"upstream\"]\n\turl = https://gitlab.com/a/b\n[remote \"fork\"]\n\turl = https://github.com/c/d\n")
 	if got := Detect(dir); got != "gitlab.com/a/b" {
 		t.Fatalf("got %q", got)
+	}
+}
+
+func TestScannerErrorsAreNotIgnored(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "r")
+	repo(t, dir, "[remote \"origin\"]\n\turl = https://github.com/acme/sablier.git\n"+strings.Repeat("x", 70*1024)+"\n")
+	if got := originRemote(dir); got != "" {
+		t.Fatalf("originRemote read past a scanner error: %q", got)
+	}
+
+	write(t, filepath.Join(dir, ".sablier-project"), strings.Repeat("x", 70*1024)+"\n")
+	if name, ok := projectFile(filepath.Join(dir, ".sablier-project")); ok {
+		t.Fatalf("projectFile accepted a line it could not scan: %q", name)
 	}
 }
 
