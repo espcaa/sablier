@@ -59,6 +59,9 @@ func projectFile(p string) (string, bool) {
 	if sc.Scan() {
 		name = strings.TrimSpace(sc.Text())
 	}
+	if sc.Err() != nil {
+		return "", false
+	}
 	if name == "" {
 		name = filepath.Base(filepath.Dir(p))
 	}
@@ -74,9 +77,6 @@ func originRemote(root string) string {
 
 	var section, first, origin string
 	sc := bufio.NewScanner(cfg)
-	if sc.Err() != nil {
-		return ""
-	}
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
 		if strings.HasPrefix(line, "[") {
@@ -96,6 +96,9 @@ func originRemote(root string) string {
 		} else if first == "" {
 			first = u
 		}
+	}
+	if sc.Err() != nil {
+		return ""
 	}
 	if origin != "" {
 		return origin
