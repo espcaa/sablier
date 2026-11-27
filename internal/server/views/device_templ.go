@@ -94,42 +94,43 @@ func DeviceConsent(approval, hostname string) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<section class=\"card device-card\"><h1>Link this app to your account?</h1><p>Only allow this if you just ran <code>sablier login</code>.</p><form action=\"/cli/authorize\" method=\"post\"><input type=\"hidden\" name=\"request\" value=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<section class=\"card device-card\"><h1>Link this app to your account?</h1>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var5 string
-			templ_7745c5c3_Var5, templ_7745c5c3_Err = templruntime.NewAttributeExpression(approval).Resolve(ctx)
-			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/server/views/device.templ`, Line: 19, Col: 56}
-			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var5)
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "\">")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Var6 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
-				templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
-				templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
-				if !templ_7745c5c3_IsBuffer {
-					defer func() {
-						templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
-						if templ_7745c5c3_Err == nil {
-							templ_7745c5c3_Err = templ_7745c5c3_BufErr
-						}
-					}()
-				}
-				ctx = templ.InitializeContext(ctx)
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "Cancel")
+			if hostname != "" {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<p>Requested by <strong class=\"device-hostname\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				return nil
-			})
-			templ_7745c5c3_Err = button(quiet, "submit", templ.Attributes{"name": "decision", "value": "deny"}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var6), templ_7745c5c3_Buffer)
+				var templ_7745c5c3_Var5 string
+				templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(hostname)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/server/views/device.templ`, Line: 18, Col: 62}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "</strong>.</p>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<p>Only allow this if you just ran <code>sablier login</code>.</p><form action=\"/cli/authorize\" method=\"post\"><input type=\"hidden\" name=\"request\" value=\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var6 string
+			templ_7745c5c3_Var6, templ_7745c5c3_Err = templruntime.NewAttributeExpression(approval).Resolve(ctx)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/server/views/device.templ`, Line: 22, Col: 56}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var6)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -145,17 +146,39 @@ func DeviceConsent(approval, hostname string) templ.Component {
 					}()
 				}
 				ctx = templ.InitializeContext(ctx)
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "Allow")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "Cancel")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				return nil
 			})
-			templ_7745c5c3_Err = button(primary, "submit", templ.Attributes{"name": "decision", "value": "allow"}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var7), templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = button(quiet, "submit", templ.Attributes{"name": "decision", "value": "deny"}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var7), templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "</form></section>")
+			templ_7745c5c3_Var8 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+				templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+				templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+				if !templ_7745c5c3_IsBuffer {
+					defer func() {
+						templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+						if templ_7745c5c3_Err == nil {
+							templ_7745c5c3_Err = templ_7745c5c3_BufErr
+						}
+					}()
+				}
+				ctx = templ.InitializeContext(ctx)
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "Allow")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				return nil
+			})
+			templ_7745c5c3_Err = button(primary, "submit", templ.Attributes{"name": "decision", "value": "allow"}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var8), templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</form></section>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -186,7 +209,7 @@ func DeviceDone() templ.Component {
 		}
 		ctx = templ.InitializeContext(ctx)
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Var9 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_Var10 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 			if !templ_7745c5c3_IsBuffer {
@@ -198,11 +221,11 @@ func DeviceDone() templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<section class=\"card device-card device-done\"><span class=\"device-check\" aria-hidden=\"true\"></span><p class=\"message\">Device approved</p>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "<section class=\"card device-card device-done\"><span class=\"device-check\" aria-hidden=\"true\"></span><p class=\"message\">Device approved</p>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Var10 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+			templ_7745c5c3_Var11 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 				templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 				templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 				if !templ_7745c5c3_IsBuffer {
@@ -214,23 +237,23 @@ func DeviceDone() templ.Component {
 					}()
 				}
 				ctx = templ.InitializeContext(ctx)
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "Go home")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "Go home")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				return nil
 			})
-			templ_7745c5c3_Err = linkButton("button quiet", "/app", templ.Attributes{"role": "button"}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var10), templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = linkButton("button quiet", "/app", templ.Attributes{"role": "button"}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var11), templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</section>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "</section>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = devicePage("link success").Render(templ.WithChildren(ctx, templ_7745c5c3_Var9), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = devicePage("link success").Render(templ.WithChildren(ctx, templ_7745c5c3_Var10), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -255,7 +278,7 @@ func deviceStyles() templ.Component {
 		}
 		ctx = templ.InitializeContext(ctx)
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "<style>\n\t\tmain:has(.device-page) {\n\t\t\tmin-height: 100dvh;\n\t\t\tjustify-content: center;\n\t\t\talign-items: center;\n\t\t\tpadding: 1.5rem 1rem;\n\t\t}\n\t\t.device-page {\n\t\t\twidth: min(100%, 36rem);\n\t\t\tdisplay: grid;\n\t\t\tgap: 2rem;\n\t\t}\n\t\t.device-wordmark {\n\t\t\tjustify-self: center;\n\t\t\tcolor: var(--color-ink);\n\t\t\tfont-size: 1.5rem;\n\t\t\tfont-style: italic;\n\t\t\tfont-weight: 700;\n\t\t\tletter-spacing: -.03em;\n\t\t\ttext-decoration: none;\n\t\t}\n\t\t.device-card {\n\t\t\tpadding: clamp(1.25rem, 4vw, 2rem);\n\t\t}\n\t\t.device-card h1 {\n\t\t\tfont-size: 1.5rem;\n\t\t\tline-height: 1.25;\n\t\t\tletter-spacing: -.025em;\n\t\t}\n\t\t.device-card p { color: var(--color-muted); }\n\t\t.device-card form {\n\t\t\tdisplay: flex;\n\t\t\tflex-wrap: wrap;\n\t\t\tjustify-content: flex-end;\n\t\t\tgap: .75rem;\n\t\t\tmargin-top: .5rem;\n\t\t}\n\t\t.device-card form .button {\n\t\t\tpadding: .6rem 1.4rem;\n\t\t}\n\t\t.device-card form .quiet { border: 1px solid var(--color-border); }\n\t\t.device-done { align-items: center; text-align: center; }\n\t\t.device-check {\n\t\t\twidth: 4.5rem;\n\t\t\taspect-ratio: 1;\n\t\t\tdisplay: grid;\n\t\t\tplace-items: center;\n\t\t\tborder-radius: 50%;\n\t\t\tbackground: var(--color-accent);\n\t\t\tcolor: var(--color-surface);\n\t\t}\n\t\t.device-check::after {\n\t\t\tcontent: \"\";\n\t\t\twidth: 1.25rem;\n\t\t\theight: .65rem;\n\t\t\tborder: solid currentColor;\n\t\t\tborder-width: 0 0 .22rem .22rem;\n\t\t\ttransform: translateY(-.13rem) rotate(-45deg);\n\t\t}\n\t\t.message {\n\t\t    color: var(--color-ink) !important;\n\t\t\tfont-size: 1.25rem;\n\t\t\tfont-weight: 500;\n\t\t}\n\t</style>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "<style>\n\t\tmain:has(.device-page) {\n\t\t\tmin-height: 100dvh;\n\t\t\tjustify-content: center;\n\t\t\talign-items: center;\n\t\t\tpadding: 1.5rem 1rem;\n\t\t}\n\t\t.device-page {\n\t\t\twidth: min(100%, 36rem);\n\t\t\tdisplay: grid;\n\t\t\tgap: 2rem;\n\t\t}\n\t\t.device-wordmark {\n\t\t\tjustify-self: center;\n\t\t\tcolor: var(--color-ink);\n\t\t\tfont-size: 1.5rem;\n\t\t\tfont-style: italic;\n\t\t\tfont-weight: 700;\n\t\t\tletter-spacing: -.03em;\n\t\t\ttext-decoration: none;\n\t\t}\n\t\t.device-card {\n\t\t\tpadding: clamp(1.25rem, 4vw, 2rem);\n\t\t}\n\t\t.device-card h1 {\n\t\t\tfont-size: 1.5rem;\n\t\t\tline-height: 1.25;\n\t\t\tletter-spacing: -.025em;\n\t\t}\n\t\t.device-card p { color: var(--color-muted); }\n\t\t.device-card form {\n\t\t\tdisplay: flex;\n\t\t\tflex-wrap: wrap;\n\t\t\tjustify-content: flex-end;\n\t\t\tgap: .75rem;\n\t\t\tmargin-top: .5rem;\n\t\t}\n\t\t.device-card form .button {\n\t\t\tpadding: .6rem 1.4rem;\n\t\t}\n\t\t.device-card form .quiet { border: 1px solid var(--color-border); }\n\t\t.device-done { align-items: center; text-align: center; }\n\t\t.device-check {\n\t\t\twidth: 4.5rem;\n\t\t\taspect-ratio: 1;\n\t\t\tdisplay: grid;\n\t\t\tplace-items: center;\n\t\t\tborder-radius: 50%;\n\t\t\tbackground: var(--color-accent);\n\t\t\tcolor: var(--color-surface);\n\t\t}\n\t\t.device-check::after {\n\t\t\tcontent: \"\";\n\t\t\twidth: 1.25rem;\n\t\t\theight: .65rem;\n\t\t\tborder: solid currentColor;\n\t\t\tborder-width: 0 0 .22rem .22rem;\n\t\t\ttransform: translateY(-.13rem) rotate(-45deg);\n\t\t}\n\t\t.message {\n\t\t    color: var(--color-ink) !important;\n\t\t\tfont-size: 1.25rem;\n\t\t\tfont-weight: 500;\n\t\t}\n\t</style>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

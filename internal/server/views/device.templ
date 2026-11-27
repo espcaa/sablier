@@ -14,6 +14,9 @@ templ DeviceConsent(approval, hostname string) {
 	@devicePage("account link") {
 		<section class="card device-card">
 			<h1>Link this app to your account?</h1>
+			if hostname != "" {
+				<p>Requested by <strong class="device-hostname">{ hostname }</strong>.</p>
+			}
 			<p>Only allow this if you just ran <code>sablier login</code>.</p>
 			<form action="/cli/authorize" method="post">
 				<input type="hidden" name="request" value={ approval }/>
